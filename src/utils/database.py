@@ -90,6 +90,11 @@ class DatabaseManager:
         
         models_mapping_json = json.dumps(models_mapping) if models_mapping else None
         
+        # 验证API密钥不是明显的JavaScript错误信息
+        if api_key.startswith('script.js:') or 'Uncaught TypeError' in api_key:
+            logger.error(f"Rejecting JavaScript error message as API key: {api_key[:50]}...")
+            raise ValueError("Invalid API key: JavaScript error message detected")
+        
         # 加密API密钥
         encrypted_api_key = encryption_manager.encrypt_api_key(api_key)
         
@@ -135,6 +140,11 @@ class DatabaseManager:
             updates.append("base_url = ?")
             params.append(base_url)
         if api_key is not None:
+            # 验证API密钥不是明显的JavaScript错误信息
+            if api_key.startswith('script.js:') or 'Uncaught TypeError' in api_key:
+                logger.error(f"Rejecting JavaScript error message as API key: {api_key[:50]}...")
+                raise ValueError("Invalid API key: JavaScript error message detected")
+            
             updates.append("api_key = ?")
             # 加密API密钥
             encrypted_api_key = encryption_manager.encrypt_api_key(api_key)

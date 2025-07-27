@@ -29,20 +29,27 @@ class APIKeyEncryption:
         encryption_key = os.getenv('ENCRYPTION_KEY')
         
         if not encryption_key:
-            # 检查数据库中是否已存在加密数据
-            has_encrypted_data = self._check_existing_encrypted_data()
+            # 首先尝试从数据库获取已存储的密钥
+            encryption_key = self._get_stored_encryption_key()
             
-            if has_encrypted_data:
-                # 如果数据库中有加密数据但没有环境变量，这是严重错误
-                logger.error("Found encrypted API keys in database but no ENCRYPTION_KEY in environment!")
-                logger.error("Please set ENCRYPTION_KEY in your .env file to decrypt existing data.")
-                raise ValueError("Missing ENCRYPTION_KEY - cannot decrypt existing encrypted data")
+            if not encryption_key:
+                # 检查数据库中是否已存在加密数据
+                has_encrypted_data = self._check_existing_encrypted_data()
+                
+                if has_encrypted_data:
+                    logger.error("Found encrypted API keys in database but no ENCRYPTION_KEY available!")
+                    logger.error("Option 1: Set ENCRYPTION_KEY in your .env file if you have the key")
+                    logger.error("Option 2: Delete encrypted channels and restart to generate new key")
+                    raise ValueError("Missing ENCRYPTION_KEY - cannot decrypt existing encrypted data")
+                else:
+                    # 没有加密数据，生成新密钥并自动保存到数据库配置
+                    encryption_key = self._generate_encryption_key()
+                    self._store_encryption_key(encryption_key)
+                    logger.info("Generated new encryption key and stored in database")
+                    logger.info("For better security, consider moving this to .env file:")
+                    logger.info(f"ENCRYPTION_KEY={encryption_key}")
             else:
-                # 没有加密数据，生成新密钥并提示用户保存
-                encryption_key = self._generate_encryption_key()
-                logger.warning("Generated new encryption key. Please add this to your .env file:")
-                logger.warning(f"ENCRYPTION_KEY={encryption_key}")
-                logger.warning("This key is required to decrypt API keys stored in the database.")
+                logger.info("Using stored encryption key from database")
         
         try:
             # 验证密钥格式
@@ -78,6 +85,55 @@ class APIKeyEncryption:
         # 生成32字节的随机密钥
         key = Fernet.generate_key()
         return key.decode()
+    
+    def _store_encryption_key(self, encryption_key: str):
+        """将加密密钥存储到数据库配置中"""
+        try:
+            from src.utils.env_config import env_config
+            import sqlite3
+            
+            db_path = env_config.database_path
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            
+            conn = sqlite3.connect(db_path)
+            # 创建配置表（如果不存在）
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS config (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # 存储加密密钥
+            conn.execute(
+                'INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+                ('encryption_key', encryption_key)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Failed to store encryption key in database: {e}")
+    
+    def _get_stored_encryption_key(self) -> Optional[str]:
+        """从数据库配置中获取加密密钥"""
+        try:
+            from src.utils.env_config import env_config
+            import sqlite3
+            
+            db_path = env_config.database_path
+            if not os.path.exists(db_path):
+                return None
+                
+            conn = sqlite3.connect(db_path)
+            cursor = conn.execute('SELECT value FROM config WHERE key = ?', ('encryption_key',))
+            result = cursor.fetchone()
+            conn.close()
+            
+            return result[0] if result else None
+        except Exception:
+            return None
     
     def encrypt_api_key(self, api_key: str) -> str:
         """加密API密钥"""

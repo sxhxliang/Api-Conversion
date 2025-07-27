@@ -21,7 +21,16 @@ class APIConverter {
         if (document.getElementById('channelForm')) {
             document.getElementById('channelForm').addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.createChannel();
+                const form = e.target;
+                
+                if (form.dataset.isEditing === 'true') {
+                    // 编辑模式
+                    const channelId = form.dataset.editingChannelId;
+                    this.updateChannel(channelId);
+                } else {
+                    // 创建模式
+                    this.createChannel();
+                }
             });
         }
 
@@ -349,23 +358,34 @@ class APIConverter {
             return;
         }
 
-        // 填充表单
-        document.getElementById('name').value = channel.name;
-        document.getElementById('channel_provider').value = channel.provider;
-        document.getElementById('base_url').value = channel.base_url;
-        document.getElementById('api_key').value = channel.api_key;
-        document.getElementById('custom_key').value = channel.custom_key;
-        document.getElementById('timeout').value = channel.timeout;
-        document.getElementById('max_retries').value = channel.max_retries;
-
         // 修改表单标题和按钮
         document.querySelector('.channel-form h3').textContent = '编辑渠道';
         const submitButton = document.querySelector('#channelForm button[type="submit"]');
         submitButton.textContent = '更新渠道';
-        submitButton.onclick = (e) => {
-            e.preventDefault();
-            this.updateChannel(channelId);
-        };
+        
+        // 存储当前编辑的渠道ID到表单数据属性
+        const form = document.getElementById('channelForm');
+        form.dataset.editingChannelId = channelId;
+        form.dataset.isEditing = 'true';
+        
+        // 填充表单数据
+        document.getElementById('name').value = channel.name || '';
+        document.getElementById('channel_provider').value = channel.provider || '';
+        document.getElementById('base_url').value = channel.base_url || '';
+        // 对于API密钥，如果已掩码则设置placeholder，否则清空
+        const apiKeyInput = document.getElementById('api_key');
+        if (channel.api_key && channel.api_key.includes('***')) {
+            apiKeyInput.value = '';
+            apiKeyInput.placeholder = channel.api_key + ' (留空保持不变)';
+            apiKeyInput.required = false;  // 编辑时可以不填
+        } else {
+            apiKeyInput.value = '';
+            apiKeyInput.placeholder = '输入新的API密钥或留空保持不变';
+            apiKeyInput.required = false;  // 编辑时可以不填
+        }
+        document.getElementById('custom_key').value = channel.custom_key || '';
+        document.getElementById('timeout').value = channel.timeout || 30;
+        document.getElementById('max_retries').value = channel.max_retries || 3;
 
         // 添加取消按钮
         if (!document.getElementById('cancelEdit')) {
@@ -395,14 +415,23 @@ class APIConverter {
     }
 
     cancelEdit() {
-        // 重置表单
-        document.getElementById('channelForm').reset();
-
         // 恢复表单标题和按钮
         document.querySelector('.channel-form h3').textContent = '添加新渠道';
         const submitButton = document.querySelector('#channelForm button[type="submit"]');
         submitButton.textContent = '添加渠道';
-        submitButton.onclick = null;
+        
+        // 清除编辑状态
+        const form = document.getElementById('channelForm');
+        delete form.dataset.editingChannelId;
+        delete form.dataset.isEditing;
+        
+        // 重置表单
+        form.reset();
+        
+        // 重置API密钥字段的placeholder和必填属性
+        const apiKeyInput = document.getElementById('api_key');
+        apiKeyInput.placeholder = '';
+        apiKeyInput.required = true;
 
         // 移除取消按钮
         const cancelButton = document.getElementById('cancelEdit');
@@ -426,13 +455,22 @@ class APIConverter {
         channelData.timeout = parseInt(channelData.timeout);
         channelData.max_retries = parseInt(channelData.max_retries);
 
+        // 输入验证
+        if (!channelData.name || !channelData.provider || !channelData.base_url || !channelData.custom_key) {
+            alert('请填写所有必填字段');
+            return;
+        }
+        
+        // 如果API密钥是掩码形式或为空，则不更新密钥
+        if (!channelData.api_key || channelData.api_key.trim() === '' || channelData.api_key.includes('***')) {
+            delete channelData.api_key;
+        }
+        
         try {
-            const sessionToken = localStorage.getItem('session_token');
             const response = await fetch(`/api/channels/${channelId}`, {
                 method: 'PUT',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${sessionToken}`
+                    'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(channelData)
             });
@@ -455,11 +493,10 @@ class APIConverter {
         if (!confirm('确定要删除这个渠道吗？')) return;
 
         try {
-            const sessionToken = localStorage.getItem('session_token');
             const response = await fetch(`/api/channels/${channelId}`, {
                 method: 'DELETE',
                 headers: {
-                    'Authorization': `Bearer ${sessionToken}`
+                    'Content-Type': 'application/json'
                 }
             });
 

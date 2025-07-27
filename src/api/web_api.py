@@ -586,11 +586,16 @@ async def update_channel(
         from src.channels.channel_manager import ChannelManager
         manager = ChannelManager()
 
+        # 确保空的api_key不会被传递，使用None而不是空字符串
+        api_key = channel_data.get("api_key")
+        if api_key is not None and api_key.strip() == "":
+            api_key = None
+        
         success = manager.update_channel(
             channel_id=channel_id,
             name=channel_data.get("name"),
             base_url=channel_data.get("base_url"),
-            api_key=channel_data.get("api_key"),
+            api_key=api_key,
             custom_key=channel_data.get("custom_key"),
             timeout=channel_data.get("timeout"),
             max_retries=channel_data.get("max_retries"),
