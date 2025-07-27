@@ -176,7 +176,7 @@ class APIConverter {
     async loadCapabilities() {
         try {
             const response = await fetch('/api/capabilities');
-            const data = await response.json();
+            await response.json();
             // 处理能力选项
         } catch (error) {
             console.error('Failed to load capabilities:', error);
