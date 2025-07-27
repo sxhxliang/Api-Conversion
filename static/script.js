@@ -1,0 +1,599 @@
+// AI API统一转换代理系统前端交互逻辑
+class APIConverter {
+    constructor() {
+        this.currentTaskId = null;
+        this.progressInterval = null;
+        this.channels = [];
+        this.init();
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.setupTabNavigation();
+        this.loadProviders();
+        this.loadCapabilities();
+        this.loadChannels();
+        this.setupModernAnimations();
+    }
+
+    setupEventListeners() {
+        // 渠道表单提交事件
+        if (document.getElementById('channelForm')) {
+            document.getElementById('channelForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.createChannel();
+            });
+        }
+
+        // 检测表单提交事件
+        if (document.getElementById('detectionForm')) {
+            document.getElementById('detectionForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.startDetection();
+            });
+        }
+
+        // 提供商选择事件
+        if (document.getElementById('provider')) {
+            document.getElementById('provider').addEventListener('change', (e) => {
+                this.updateDefaultUrl(e.target.value);
+                this.updateModelOptions(e.target.value);
+            });
+        }
+
+        // 渠道提供商选择事件
+        if (document.getElementById('channel_provider')) {
+            document.getElementById('channel_provider').addEventListener('change', (e) => {
+                this.updateChannelDefaultUrl(e.target.value);
+            });
+        }
+    }
+
+    updateDefaultUrl(provider) {
+        const defaultUrls = {
+            'openai': 'https://api.openai.com/v1',
+            'anthropic': 'https://api.anthropic.com',
+            'gemini': 'https://generativelanguage.googleapis.com/v1beta'
+        };
+
+        const baseUrlInput = document.getElementById('detection_base_url');
+        if (defaultUrls[provider] && baseUrlInput) {
+            baseUrlInput.value = defaultUrls[provider];
+        }
+    }
+
+    updateChannelDefaultUrl(provider) {
+        const defaultUrls = {
+            'openai': 'https://api.openai.com/v1',
+            'anthropic': 'https://api.anthropic.com',
+            'gemini': 'https://generativelanguage.googleapis.com/v1beta'
+        };
+
+        const baseUrlInput = document.getElementById('base_url');
+        if (defaultUrls[provider] && baseUrlInput) {
+            baseUrlInput.value = defaultUrls[provider];
+        }
+    }
+
+    updateModelOptions(provider) {
+        const modelSelect = document.getElementById('target_model_select');
+        if (!modelSelect) return;
+
+        const commonModels = {
+            'openai': [
+                'gpt-4o',
+                'gpt-4o-mini',
+                'gpt-4-turbo',
+                'gpt-4',
+                'gpt-3.5-turbo'
+            ],
+            'anthropic': [
+                'claude-3-5-sonnet-20241022',
+                'claude-3-5-haiku-20241022',
+                'claude-3-opus-20240229',
+                'claude-3-sonnet-20240229',
+                'claude-3-haiku-20240307'
+            ],
+            'gemini': [
+                'gemini-1.5-pro',
+                'gemini-1.5-flash',
+                'gemini-1.0-pro'
+            ]
+        };
+
+        // 清空现有选项
+        modelSelect.innerHTML = '<option value="">请选择模型</option>';
+
+        // 添加对应的模型选项
+        if (commonModels[provider]) {
+            commonModels[provider].forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                modelSelect.appendChild(option);
+            });
+        }
+    }
+
+    setupTabNavigation() {
+        // 标签页切换事件
+        const tabButtons = document.querySelectorAll('.tab-button');
+        tabButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                const targetTab = e.target.getAttribute('data-tab');
+                this.switchTab(targetTab);
+            });
+        });
+    }
+
+    switchTab(tabName) {
+        // 移除所有活动状态
+        document.querySelectorAll('.tab-button').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+
+        // 激活选中的标签页
+        const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+        const activeContent = document.getElementById(`${tabName}-tab`);
+
+        if (activeButton && activeContent) {
+            activeButton.classList.add('active');
+            activeContent.classList.add('active');
+        }
+    }
+
+    async loadProviders() {
+        try {
+            const response = await fetch('/api/providers');
+            const data = await response.json();
+
+            const channelProviderSelect = document.getElementById('channel_provider');
+            if (channelProviderSelect) {
+                data.providers.forEach(provider => {
+                    const option = document.createElement('option');
+                    option.value = provider.id;
+                    option.textContent = provider.name;
+                    channelProviderSelect.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load providers:', error);
+        }
+    }
+
+    async loadCapabilities() {
+        try {
+            const response = await fetch('/api/capabilities');
+            const data = await response.json();
+            // 处理能力选项
+        } catch (error) {
+            console.error('Failed to load capabilities:', error);
+        }
+    }
+
+    async startDetection() {
+        // 检测逻辑
+        console.log('Starting detection...');
+    }
+
+    setupModernAnimations() {
+        // 动画设置
+        const inputs = document.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+                input.closest('.form-group').classList.add('focused');
+            });
+
+            input.addEventListener('blur', () => {
+                input.closest('.form-group').classList.remove('focused');
+            });
+        });
+    }
+
+    // 渠道管理方法
+    async createChannel() {
+        const form = document.getElementById('channelForm');
+        const formData = new FormData(form);
+        const channelData = Object.fromEntries(formData.entries());
+
+        // 转换数值类型
+        channelData.timeout = parseInt(channelData.timeout);
+        channelData.max_retries = parseInt(channelData.max_retries);
+
+        try {
+            const sessionToken = localStorage.getItem('session_token');
+            const response = await fetch('/api/channels', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`
+                },
+                body: JSON.stringify(channelData)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert('渠道创建成功！');
+                form.reset();
+                this.loadChannels(); // 重新加载渠道列表
+            } else {
+                alert('创建失败: ' + (result.detail || '未知错误'));
+            }
+        } catch (error) {
+            alert('请求失败: ' + error.message);
+        }
+    }
+
+    async loadChannels() {
+        console.log('开始加载渠道列表...');
+        try {
+            const sessionToken = localStorage.getItem('session_token');
+            const response = await fetch('/api/channels', {
+                headers: {
+                    'Authorization': `Bearer ${sessionToken}`
+                }
+            });
+            const result = await response.json();
+            console.log('API响应:', result);
+
+            if (response.ok) {
+                this.channels = result.channels;
+                console.log('渠道数量:', this.channels.length);
+                this.updateChannelsList();
+            } else {
+                console.error('加载渠道列表失败:', result.detail);
+                // 显示错误信息
+                const channelsList = document.getElementById('channelsList');
+                if (channelsList) {
+                    channelsList.innerHTML = '<p>加载渠道列表失败</p>';
+                }
+            }
+        } catch (error) {
+            console.error('加载渠道列表失败:', error);
+            // 显示错误信息
+            const channelsList = document.getElementById('channelsList');
+            if (channelsList) {
+                channelsList.innerHTML = '<p>加载渠道列表失败</p>';
+            }
+        }
+    }
+
+    updateChannelsList() {
+        console.log('更新渠道列表，渠道数量:', this.channels.length);
+        const channelsList = document.getElementById('channelsList');
+        if (!channelsList) {
+            console.error('找不到channelsList元素');
+            return;
+        }
+
+        if (this.channels.length === 0) {
+            console.log('渠道列表为空，显示暂无配置信息');
+            channelsList.innerHTML = '<p>暂无配置的渠道</p>';
+            return;
+        }
+
+        const channelsHTML = this.channels.map(channel => `
+            <div class="channel-item ${channel.enabled ? 'enabled' : 'disabled'}">
+                <div class="channel-info">
+                    <h4>${channel.name}</h4>
+                    <p><strong>提供商:</strong> ${channel.provider}</p>
+                    <p><strong>URL:</strong> ${channel.base_url}</p>
+                    <p><strong>自定义Key:</strong> <code>${channel.custom_key}</code></p>
+                    <p><strong>状态:</strong> ${channel.enabled ? '启用' : '禁用'}</p>
+                    <p><small>创建时间: ${new Date(channel.created_at).toLocaleString()}</small></p>
+                </div>
+                <div class="channel-actions">
+                    <button onclick="apiConverter.testChannel('${channel.id}')" class="btn-secondary">测试</button>
+                    <button onclick="apiConverter.editChannel('${channel.id}')" class="btn-primary">编辑</button>
+                    <button onclick="apiConverter.toggleChannel('${channel.id}')" class="btn-secondary">
+                        ${channel.enabled ? '禁用' : '启用'}
+                    </button>
+                    <button onclick="apiConverter.deleteChannel('${channel.id}')" class="btn-danger">删除</button>
+                </div>
+            </div>
+        `).join('');
+
+        channelsList.innerHTML = channelsHTML;
+    }
+
+    async testChannel(channelId) {
+        try {
+            const response = await fetch(`/api/channels/${channelId}/test`);
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`测试成功！响应时间: ${result.test_result.response_time}ms`);
+            } else {
+                alert('测试失败: ' + (result.detail || '未知错误'));
+            }
+        } catch (error) {
+            alert('测试失败: ' + error.message);
+        }
+    }
+
+    async toggleChannel(channelId) {
+        const channel = this.channels.find(c => c.id === channelId);
+        if (!channel) return;
+
+        try {
+            const response = await fetch(`/api/channels/${channelId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    enabled: !channel.enabled
+                })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                this.loadChannels(); // 重新加载渠道列表
+            } else {
+                alert('操作失败: ' + (result.detail || '未知错误'));
+            }
+        } catch (error) {
+            alert('操作失败: ' + error.message);
+        }
+    }
+
+    editChannel(channelId) {
+        const channel = this.channels.find(c => c.id === channelId);
+        if (!channel) {
+            alert('渠道不存在');
+            return;
+        }
+
+        // 填充表单
+        document.getElementById('name').value = channel.name;
+        document.getElementById('channel_provider').value = channel.provider;
+        document.getElementById('base_url').value = channel.base_url;
+        document.getElementById('api_key').value = channel.api_key;
+        document.getElementById('custom_key').value = channel.custom_key;
+        document.getElementById('timeout').value = channel.timeout;
+        document.getElementById('max_retries').value = channel.max_retries;
+
+        // 修改表单标题和按钮
+        document.querySelector('.channel-form h3').textContent = '编辑渠道';
+        const submitButton = document.querySelector('#channelForm button[type="submit"]');
+        submitButton.textContent = '更新渠道';
+        submitButton.onclick = (e) => {
+            e.preventDefault();
+            this.updateChannel(channelId);
+        };
+
+        // 添加取消按钮
+        if (!document.getElementById('cancelEdit')) {
+            const cancelButton = document.createElement('button');
+            cancelButton.id = 'cancelEdit';
+            cancelButton.type = 'button';
+            cancelButton.className = 'btn-secondary';
+            cancelButton.textContent = '取消编辑';
+            cancelButton.onclick = () => this.cancelEdit();
+            submitButton.parentNode.insertBefore(cancelButton, submitButton.nextSibling);
+        }
+
+        // 添加编辑状态样式提示
+        const channelForm = document.querySelector('.channel-form');
+        if (channelForm) {
+            channelForm.classList.add('editing-mode');
+            
+            // 延迟滚动，确保DOM更新完成
+            setTimeout(() => {
+                channelForm.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                });
+            }, 100);
+        }
+    }
+
+    cancelEdit() {
+        // 重置表单
+        document.getElementById('channelForm').reset();
+
+        // 恢复表单标题和按钮
+        document.querySelector('.channel-form h3').textContent = '添加新渠道';
+        const submitButton = document.querySelector('#channelForm button[type="submit"]');
+        submitButton.textContent = '添加渠道';
+        submitButton.onclick = null;
+
+        // 移除取消按钮
+        const cancelButton = document.getElementById('cancelEdit');
+        if (cancelButton) {
+            cancelButton.remove();
+        }
+
+        // 移除编辑状态样式
+        const channelForm = document.querySelector('.channel-form');
+        if (channelForm) {
+            channelForm.classList.remove('editing-mode');
+        }
+    }
+
+    async updateChannel(channelId) {
+        const form = document.getElementById('channelForm');
+        const formData = new FormData(form);
+        const channelData = Object.fromEntries(formData.entries());
+
+        // 转换数值类型
+        channelData.timeout = parseInt(channelData.timeout);
+        channelData.max_retries = parseInt(channelData.max_retries);
+
+        try {
+            const sessionToken = localStorage.getItem('session_token');
+            const response = await fetch(`/api/channels/${channelId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${sessionToken}`
+                },
+                body: JSON.stringify(channelData)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert('渠道更新成功！');
+                this.cancelEdit();
+                this.loadChannels(); // 重新加载渠道列表
+            } else {
+                alert('更新失败: ' + (result.detail || '未知错误'));
+            }
+        } catch (error) {
+            alert('请求失败: ' + error.message);
+        }
+    }
+
+    async deleteChannel(channelId) {
+        if (!confirm('确定要删除这个渠道吗？')) return;
+
+        try {
+            const sessionToken = localStorage.getItem('session_token');
+            const response = await fetch(`/api/channels/${channelId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${sessionToken}`
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert('删除成功！');
+                this.loadChannels(); // 重新加载渠道列表
+            } else {
+                alert('删除失败: ' + (result.detail || '未知错误'));
+            }
+        } catch (error) {
+            alert('删除失败: ' + error.message);
+        }
+    }
+}
+
+// 现代化的平滑滚动效果
+class SmoothScroll {
+    constructor() {
+        this.init();
+    }
+
+    init() {
+        // 为链接添加平滑滚动
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', (e) => {
+                e.preventDefault();
+                const target = document.querySelector(anchor.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+    }
+}
+
+// 全局函数定义
+function updateTargetModel() {
+    const select = document.getElementById('target_model_select');
+    const input = document.getElementById('target_model');
+    if (select && input && select.value) {
+        input.value = select.value;
+    }
+}
+
+function selectAllCapabilities() {
+    document.querySelectorAll('input[name="capabilities"]').forEach(cb => {
+        cb.checked = true;
+    });
+}
+
+function clearAllCapabilities() {
+    document.querySelectorAll('input[name="capabilities"]').forEach(cb => {
+        cb.checked = false;
+    });
+}
+
+async function fetchModels() {
+    const provider = document.getElementById('provider').value;
+    const baseUrl = document.getElementById('detection_base_url').value;
+    const apiKey = document.getElementById('detection_api_key').value;
+
+    if (!provider || !baseUrl || !apiKey) {
+        alert('请先填写提供商、API基础URL和API密钥');
+        return;
+    }
+
+    const btn = document.getElementById('fetch_models_btn');
+    btn.disabled = true;
+    btn.textContent = '获取中...';
+
+    try {
+        const response = await fetch('/api/fetch_models', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                provider: provider,
+                base_url: baseUrl,
+                api_key: apiKey
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            const select = document.getElementById('target_model_select');
+            select.innerHTML = '<option value="">请选择模型</option>';
+
+            data.models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model;
+                option.textContent = model;
+                select.appendChild(option);
+            });
+        } else {
+            alert('获取模型列表失败: ' + (data.detail || '未知错误'));
+        }
+    } catch (error) {
+        alert('请求失败: ' + error.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '获取模型列表';
+    }
+}
+
+// 全局实例
+let apiConverter;
+
+// 初始化应用函数
+function initializeApp() {
+    apiConverter = new APIConverter();
+    new SmoothScroll();
+
+    // 添加键盘导航支持
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab') {
+            document.body.classList.add('keyboard-navigation');
+        }
+    });
+
+    document.addEventListener('mousedown', () => {
+        document.body.classList.remove('keyboard-navigation');
+    });
+}
+
+// 如果页面已经加载完成，直接初始化；否则等待DOMContentLoaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeApp);
+} else {
+    initializeApp();
+}

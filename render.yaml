@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: ai-api-capability-detector
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python web_server.py --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONPATH
+        value: /opt/render/project/src 

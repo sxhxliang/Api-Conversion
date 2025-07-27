@@ -1,0 +1,3 @@
+"""
+Channel management module
+"""
