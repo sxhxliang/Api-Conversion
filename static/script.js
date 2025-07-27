@@ -228,7 +228,7 @@ class APIConverter {
             if (response.ok) {
                 alert('渠道创建成功！');
                 form.reset();
-                this.loadChannels(); // 重新加载渠道列表
+                await this.loadChannels(); // 重新加载渠道列表
             } else {
                 alert('创建失败: ' + (result.detail || '未知错误'));
             }
@@ -480,9 +480,15 @@ class APIConverter {
             if (response.ok) {
                 alert('渠道更新成功！');
                 this.cancelEdit();
-                this.loadChannels(); // 重新加载渠道列表
+                await this.loadChannels(); // 重新加载渠道列表
             } else {
-                alert('更新失败: ' + (result.detail || '未知错误'));
+                if (response.status === 404) {
+                    alert('渠道不存在，可能已被删除。页面将刷新以同步最新数据。');
+                    await this.loadChannels();
+                    this.cancelEdit();
+                } else {
+                    alert('更新失败: ' + (result.detail || '未知错误'));
+                }
             }
         } catch (error) {
             alert('请求失败: ' + error.message);
@@ -504,7 +510,7 @@ class APIConverter {
 
             if (response.ok) {
                 alert('删除成功！');
-                this.loadChannels(); // 重新加载渠道列表
+                await this.loadChannels(); // 重新加载渠道列表
             } else {
                 alert('删除失败: ' + (result.detail || '未知错误'));
             }
