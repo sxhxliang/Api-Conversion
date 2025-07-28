@@ -81,12 +81,6 @@ OpenAI ↔ Anthropic ↔ Gemini
 - ✅ **结构化输出**：JSON Schema自动适配
 - ✅ **模型映射**：智能模型名称转换
 
-### 3. 多渠道管理（规划中）
-- **渠道类型**：官方API、代理服务、自建服务
-- **智能路由**：基于延迟、成功率的智能选择
-- **健康检查**：实时监控渠道可用性
-- **配额管理**：支持多渠道的配额分配
-
 ## 🚀 快速开始
 
 1. **安装依赖**
@@ -146,19 +140,6 @@ gemini -m your_model
 
 ## 🚢 部署指南
 
-### Render 平台部署（推荐）
-
-项目已配置好 `render.yaml`，支持一键部署：
-
-1. **将代码推送到GitHub**
-2. **连接Render平台**：https://dashboard.render.com
-3. **自动部署**：Render会自动读取配置并部署
-
-**配置详情：**
-- **构建命令**：`pip install -r requirements.txt`
-- **启动命令**：`python web_server.py --host 0.0.0.0 --port $PORT`
-- **环境变量**：`PYTHONPATH=/opt/render/project/src`
-
 ### Docker 部署
 
 ```bash
@@ -182,6 +163,20 @@ pip install -r requirements.txt
 # 启动开发服务器
 python web_server.py --debug
 ```
+
+### Render 平台部署
+
+项目已配置好 `render.yaml`，支持一键部署：
+
+1. **将代码推送到GitHub**
+2. **连接Render平台**：https://dashboard.render.com
+3. **自动部署**：Render会自动读取配置并部署
+
+**配置详情：**
+
+- **构建命令**：`pip install -r requirements.txt`
+- **启动命令**：`python web_server.py --host 0.0.0.0 --port $PORT`
+- **环境变量**：`PYTHONPATH=/opt/render/project/src`
 
 ## 📊 支持的能力检测
 
@@ -282,12 +277,6 @@ OpenAI ↔ Anthropic ↔ Gemini
 - ✅ **Structured Output**: Automatic JSON Schema adaptation
 - ✅ **Model Mapping**: Smart model name conversion
 
-### 3. Multi-Channel Management (Planned)
-- **Channel Types**: Official API, proxy services, self-hosted services
-- **Smart Routing**: Intelligent selection based on latency and success rate
-- **Health Checks**: Real-time monitoring of channel availability
-- **Quota Management**: Support quota allocation across multiple channels
-
 ## 🚀 Quick Start
 
 1. **Install Dependencies**
@@ -347,19 +336,6 @@ gemini -m your_model
 
 ## 🚢 Deployment Guide
 
-### Render Platform Deployment (Recommended)
-
-The project is pre-configured with `render.yaml` for one-click deployment:
-
-1. **Push code to GitHub**
-2. **Connect Render platform**: https://dashboard.render.com
-3. **Auto Deploy**: Render will automatically read configuration and deploy
-
-**Configuration Details:**
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `python web_server.py --host 0.0.0.0 --port $PORT`
-- **Environment Variables**: `PYTHONPATH=/opt/render/project/src`
-
 ### Docker Deployment
 
 ```bash
@@ -383,6 +359,20 @@ pip install -r requirements.txt
 # Start development server
 python web_server.py --debug
 ```
+
+### Render Platform Deployment 
+
+The project is pre-configured with `render.yaml` for one-click deployment:
+
+1. **Push code to GitHub**
+2. **Connect Render platform**: https://dashboard.render.com
+3. **Auto Deploy**: Render will automatically read configuration and deploy
+
+**Configuration Details:**
+
+- **Build Command**: `pip install -r requirements.txt`
+- **Start Command**: `python web_server.py --host 0.0.0.0 --port $PORT`
+- **Environment Variables**: `PYTHONPATH=/opt/render/project/src`
 
 ## 📊 Supported Capability Detection
 
