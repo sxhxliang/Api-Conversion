@@ -1976,6 +1976,218 @@ body::before {
     }
 }
 
+/* 头部操作按钮样式 */
+.header-actions {
+    display: flex;
+    gap: var(--space-md);
+    align-items: center;
+}
+
+.btn-tertiary {
+    padding: var(--space-sm) var(--space-md);
+    background: transparent;
+    border: 1px solid var(--border-primary);
+    color: var(--text-secondary);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--duration-elegance) var(--ease-elegant);
+    font-family: var(--font-body);
+}
+
+.btn-tertiary:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--color-accent);
+    color: var(--text-primary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 修改密码模态框样式 */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.modal-content {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-luxury);
+    padding: 0;
+    max-width: 400px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-lg);
+    border-bottom: 1px solid var(--border-primary);
+}
+
+.modal-header h3 {
+    font-family: var(--font-heading);
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all var(--duration-elegance) var(--ease-elegant);
+}
+
+.modal-close:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.password-form {
+    padding: var(--space-lg);
+}
+
+.password-form .form-group {
+    margin-bottom: var(--space-lg);
+}
+
+.password-form label {
+    display: block;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: var(--space-sm);
+    font-size: 0.875rem;
+}
+
+.password-form input[type="password"] {
+    width: 100%;
+    padding: var(--space-md);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-family: var(--font-body);
+    background: var(--bg-secondary);
+    transition: all var(--duration-elegance) var(--ease-elegant);
+}
+
+.password-form input[type="password"]:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+    background: #fafafa;
+}
+
+.password-form .form-hint {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+    margin-top: var(--space-xs);
+    font-style: italic;
+}
+
+.modal-actions {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: flex-end;
+    margin-top: var(--space-lg);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-secondary);
+}
+
+.modal-actions .btn-primary,
+.modal-actions .btn-secondary {
+    padding: var(--space-sm) var(--space-lg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    min-width: 80px;
+}
+
+/* 消息样式 */
+.message {
+    padding: var(--space-md);
+    border-radius: var(--radius-md);
+    margin-top: var(--space-lg);
+    font-size: 0.875rem;
+    font-weight: 500;
+    position: relative;
+    border-left: 4px solid;
+}
+
+.message.success {
+    background: linear-gradient(135deg, #e8f5e8, #f1f8e9);
+    color: var(--text-success);
+    border-left-color: var(--text-success);
+    border: 1px solid #c8e6c9;
+}
+
+.message.error {
+    background: linear-gradient(135deg, #ffeaea, #ffebee);
+    color: var(--text-error);
+    border-left-color: var(--text-error);
+    border: 1px solid #ffcdd2;
+}
+
+.message.success::before {
+    content: '✓';
+    position: absolute;
+    left: var(--space-md);
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: bold;
+    margin-right: var(--space-sm);
+}
+
+.message.error::before {
+    content: '⚠';
+    position: absolute;
+    left: var(--space-md);
+    top: 50%;
+    transform: translateY(-50%);
+    font-weight: bold;
+    margin-right: var(--space-sm);
+}
+
+.message {
+    padding-left: calc(var(--space-md) + 20px);
+}
+
 @media (prefers-reduced-motion: reduce) {
 
     *,

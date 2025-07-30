@@ -117,6 +117,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ChangePasswordRequest(BaseModel):
+    """修改密码请求"""
+    old_password: str
+    new_password: str
+
+
 class LoginResponse(BaseModel):
     """登录响应"""
     success: bool
@@ -225,7 +231,10 @@ async def dashboard(request: Request):
         <div class="container">
             <div class="header-bar">
                 <h1>AI API FORMAT CONVERSION</h1>
-                <button onclick="logout()" class="btn-secondary">注销</button>
+                <div class="header-actions">
+                    <button onclick="showChangePasswordModal()" class="btn-tertiary">修改密码</button>
+                    <button onclick="logout()" class="btn-secondary">注销</button>
+                </div>
             </div>
 
             <!-- 标签页导航 -->
@@ -422,6 +431,42 @@ async def dashboard(request: Request):
                     <div id="results-content"></div>
                 </div>
             </div>
+
+            <!-- 能力检测器标签页 -->
+            <div id="detector-tab" class="tab-content">
+                <h2>能力检测器</h2>
+                <p>能力检测功能正在开发中...</p>
+            </div>
+
+            <!-- 修改密码模态框 -->
+            <div id="changePasswordModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>修改管理员密码</h3>
+                        <button type="button" class="modal-close" onclick="hideChangePasswordModal()">&times;</button>
+                    </div>
+                    <form id="changePasswordForm" class="password-form">
+                        <div class="form-group">
+                            <label for="oldPassword">当前密码:</label>
+                            <input type="password" id="oldPassword" name="oldPassword" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newPassword">新密码:</label>
+                            <input type="password" id="newPassword" name="newPassword" required minlength="6">
+                            <small class="form-hint">密码长度不少于6位</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword">确认新密码:</label>
+                            <input type="password" id="confirmPassword" name="confirmPassword" required minlength="6">
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn-secondary" onclick="hideChangePasswordModal()">取消</button>
+                            <button type="submit" class="btn-primary">修改密码</button>
+                        </div>
+                    </form>
+                    <div id="password-message" class="message" style="display: none;"></div>
+                </div>
+            </div>
         </div>
 
         <script>
@@ -437,6 +482,107 @@ async def dashboard(request: Request):
                 } catch (error) {
                     console.error('注销失败:', error);
                     window.location.href = '/login'; // 即使失败也跳转
+                }
+            }
+
+            // 模态框显示/隐藏功能
+            function showChangePasswordModal() {
+                const modal = document.getElementById('changePasswordModal');
+                modal.style.display = 'flex';
+                // 清空表单和消息
+                document.getElementById('changePasswordForm').reset();
+                const messageDiv = document.getElementById('password-message');
+                messageDiv.style.display = 'none';
+                // 聚焦到第一个输入框
+                document.getElementById('oldPassword').focus();
+            }
+
+            function hideChangePasswordModal() {
+                const modal = document.getElementById('changePasswordModal');
+                modal.style.display = 'none';
+            }
+
+            // 点击模态框背景关闭
+            window.onclick = function(event) {
+                const modal = document.getElementById('changePasswordModal');
+                if (event.target === modal) {
+                    hideChangePasswordModal();
+                }
+            }
+
+            // 修改密码功能
+            async function changePassword(event) {
+                event.preventDefault();
+                
+                const oldPassword = document.getElementById('oldPassword').value;
+                const newPassword = document.getElementById('newPassword').value;
+                const confirmPassword = document.getElementById('confirmPassword').value;
+                const messageDiv = document.getElementById('password-message');
+                
+                // 前端验证
+                if (newPassword !== confirmPassword) {
+                    showPasswordMessage('新密码和确认密码不一致', 'error');
+                    return;
+                }
+                
+                if (newPassword.length < 6) {
+                    showPasswordMessage('新密码长度不能少于6位', 'error');
+                    return;
+                }
+                
+                if (oldPassword === newPassword) {
+                    showPasswordMessage('新密码不能与旧密码相同', 'error');
+                    return;
+                }
+                
+                try {
+                    const response = await fetch('/api/change-password', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            old_password: oldPassword,
+                            new_password: newPassword
+                        })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        showPasswordMessage(result.message, 'success');
+                        // 清空表单
+                        document.getElementById('changePasswordForm').reset();
+                        
+                        // 如果需要重新认证，2秒后关闭模态框并跳转到登录页
+                        if (result.require_reauth) {
+                            setTimeout(() => {
+                                hideChangePasswordModal();
+                                setTimeout(() => {
+                                    window.location.href = '/login';
+                                }, 500);
+                            }, 2000);
+                        }
+                    } else {
+                        showPasswordMessage(result.message, 'error');
+                    }
+                } catch (error) {
+                    console.error('修改密码失败:', error);
+                    showPasswordMessage('修改密码失败，请稍后重试', 'error');
+                }
+            }
+            
+            function showPasswordMessage(message, type) {
+                const messageDiv = document.getElementById('password-message');
+                messageDiv.textContent = message;
+                messageDiv.className = `message ${type}`;
+                messageDiv.style.display = 'block';
+                
+                // 3秒后自动隐藏消息（除非是成功消息）
+                if (type !== 'success') {
+                    setTimeout(() => {
+                        messageDiv.style.display = 'none';
+                    }, 3000);
                 }
             }
 
@@ -456,6 +602,12 @@ async def dashboard(request: Request):
                     console.error('Failed to load script.js');
                 };
                 document.head.appendChild(script);
+                
+                // 绑定修改密码表单事件
+                const changePasswordForm = document.getElementById('changePasswordForm');
+                if (changePasswordForm) {
+                    changePasswordForm.addEventListener('submit', changePassword);
+                }
             });
         </script>
     </body>
@@ -500,6 +652,70 @@ async def logout(request: Request):
             "message": "注销成功"
         }
     )
+
+
+@app.post("/api/change-password")
+async def change_password(change_request: ChangePasswordRequest, request: Request):
+    """修改管理员密码 - 需要认证"""
+    # 检查会话认证状态
+    if not request.session.get("authenticated"):
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "未授权访问，请先登录"
+            },
+            status_code=401
+        )
+    
+    # 验证旧密码
+    if not auth_manager.verify_admin_password(change_request.old_password):
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "旧密码错误"
+            },
+            status_code=400
+        )
+    
+    # 验证新密码格式
+    if len(change_request.new_password) < 6:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "新密码长度不能少于6位"
+            },
+            status_code=400
+        )
+    
+    if change_request.old_password == change_request.new_password:
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "新密码不能与旧密码相同"
+            },
+            status_code=400
+        )
+    
+    try:
+        # 设置新密码（会自动清除所有会话）
+        auth_manager.set_admin_password(change_request.new_password)
+        
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "密码修改成功，所有会话已失效，请重新登录",
+                "require_reauth": True
+            }
+        )
+    except Exception as e:
+        logger.error(f"Failed to change password: {e}")
+        return JSONResponse(
+            content={
+                "success": False,
+                "message": "密码修改失败，请稍后重试"
+            },
+            status_code=500
+        )
 
 
 

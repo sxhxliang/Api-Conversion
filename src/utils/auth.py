@@ -24,15 +24,26 @@ class AuthManager:
     
     def _ensure_admin_password(self):
         """确保管理员密码已设置"""
-        stored_password = db_manager.get_config("admin_password_hash")
-        if not stored_password:
-            # 如果数据库中没有设置密码，使用环境配置中的默认密码
-            default_password = env_config.admin_password
-            self.set_admin_password(default_password)
-            password_prefix = default_password[:3] + "***" if len(default_password) >= 3 else "***"
+        # 环境变量优先：先读取环境变量中的密码
+        env_password = env_config.admin_password
+        stored_password_hash = db_manager.get_config("admin_password_hash")
+        
+        if not stored_password_hash:
+            # 数据库中没有密码，将环境变量密码存入数据库（启动时不清除会话）
+            self.set_admin_password(env_password, invalidate_sessions=False)
+            password_prefix = env_password[:3] + "***" if len(env_password) >= 3 else "***"
             logger.info(f"Admin password initialized from environment config (prefix: {password_prefix})")
         else:
-            logger.info("Using existing admin password from database")
+            # 数据库中有密码，检查是否与环境变量密码一致
+            if self.verify_password(env_password, stored_password_hash):
+                # 环境变量密码与数据库密码一致，不做任何操作
+                logger.info("Environment password matches stored password")
+            else:
+                # 环境变量密码与数据库密码不一致，用环境变量密码更新数据库
+                # 启动时如果密码不一致，也要清除会话（可能是环境配置被修改）
+                self.set_admin_password(env_password, invalidate_sessions=True)
+                password_prefix = env_password[:3] + "***" if len(env_password) >= 3 else "***"
+                logger.info(f"Admin password updated from environment config (prefix: {password_prefix})")
     
     def hash_password(self, password: str) -> str:
         """对密码进行哈希"""
@@ -50,11 +61,17 @@ class AuthManager:
         except Exception:
             return False
     
-    def set_admin_password(self, password: str):
+    def set_admin_password(self, password: str, invalidate_sessions: bool = True):
         """设置管理员密码"""
         password_hash = self.hash_password(password)
         db_manager.set_config("admin_password_hash", password_hash)
-        logger.info("Admin password updated")
+        
+        # 密码修改后，为安全起见，使所有现有会话失效
+        if invalidate_sessions:
+            invalidated_count = self.invalidate_all_sessions()
+            logger.info(f"Admin password updated, invalidated {invalidated_count} sessions")
+        else:
+            logger.info("Admin password updated")
     
     def verify_admin_password(self, password: str) -> bool:
         """验证管理员密码"""
@@ -113,6 +130,28 @@ class AuthManager:
             logger.info(f"Session {mask_api_key(session_token)} deleted successfully")
         else:
             logger.warning(f"Failed to delete session {mask_api_key(session_token)} - not found")
+    
+    def invalidate_all_sessions(self):
+        """使所有会话失效 - 用于密码修改后的安全措施"""
+        try:
+            # 获取所有session配置
+            session_configs = db_manager.get_configs_by_prefix("session:")
+            deleted_count = 0
+            
+            for config in session_configs:
+                session_key = config["key"]
+                if db_manager.delete_config(session_key):
+                    deleted_count += 1
+            
+            if deleted_count > 0:
+                logger.info(f"Invalidated {deleted_count} sessions due to password change")
+            else:
+                logger.info("No active sessions to invalidate")
+                
+            return deleted_count
+        except Exception as e:
+            logger.error(f"Failed to invalidate sessions: {e}")
+            return 0
     
     def cleanup_expired_sessions(self):
         """清理过期会话"""
