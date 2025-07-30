@@ -1,20 +1,20 @@
-# 多渠道AI API统一转换代理系统
+# 多渠道AI API统一转换代理系统 | Multi-Channel AI API Unified Conversion Proxy System
 
 <div align="right">
-  <a href="#english-version">🇺🇸 English</a> | 
-  <a href="#chinese-version">🇨🇳 中文</a>
+  <details>
+    <summary>🌐 Language / 语言</summary>
+    <p>
+      <a href="README.md">🇨🇳 中文版本</a><br>
+      <a href="README_EN.md">🇺🇸 English Version</a>
+    </p>
+  </details>
 </div>
-
-## <a name="chinese-version"></a>中文版
-
 
 ## 📖 项目概述
 
 这是一个多渠道AI API统一转换代理系统，支持OpenAI、Anthropic Claude、Google Gemini三种API格式的相互转换，具备多渠道管理和全面能力检测功能。
 
 ![image-20250727163506047](./images/image-20250727163506047.png)
-
-
 
 🔄 系统工作原理
 
@@ -57,14 +57,7 @@ graph LR
 
 ## 🎯 核心功能
 
-### 1. 全面能力检测
-- **基础能力**：聊天对话、流式输出、系统消息、多轮对话
-- **高级能力**：视觉理解、文件上传、结构化输出、JSON模式
-- **工具能力**：函数调用、工具使用、代码执行
-- **模型检测**：自动获取支持的模型列表
-- **多平台支持**：OpenAI、Anthropic Claude、Google Gemini
-
-### 2. 智能格式转换
+### 1. 智能格式转换
 ```bash
 # 支持的转换路径
 OpenAI ↔ Anthropic ↔ Gemini
@@ -80,6 +73,23 @@ OpenAI ↔ Anthropic ↔ Gemini
 - ✅ **视觉理解**：图像输入格式统一处理
 - ✅ **结构化输出**：JSON Schema自动适配
 - ✅ **模型映射**：智能模型名称转换
+- ✅ **思考预算转换**：支持OpenAI reasoning_effort ↔ Anthropic/Gemini thinkingBudget互转
+
+### 2. 全面能力检测
+- **基础能力**：聊天对话、流式输出、系统消息、多轮对话
+- **高级能力**：视觉理解、文件上传、结构化输出、JSON模式
+- **工具能力**：函数调用、工具使用、代码执行
+- **模型检测**：自动获取支持的模型列表
+- **多平台支持**：OpenAI、Anthropic Claude、Google Gemini
+
+### 3. 多格式模型列表API 📋
+支持返回三种不同格式的模型列表：
+
+- **OpenAI格式**：`GET /v1/models` (Bearer认证)
+- **Anthropic格式**：`GET /v1/models` (x-api-key认证)  
+- **Gemini格式**：`GET /v1beta/models` (key参数认证)
+
+从真实API获取模型数据，自动格式转换，告别硬编码模型列表。
 
 ## 🚀 快速开始
 
@@ -98,6 +108,44 @@ python web_server.py
 - 选择AI提供商，输入API配置
 - 一键检测所有能力，查看详细结果
 - 使用转换功能，详见系统工作原理
+
+## 🔧 .env配置
+
+复制 `.env.example` 为 `.env` 并根据需要修改配置：
+
+### 管理员认证配置
+- `ADMIN_PASSWORD` - 管理员登录密码（默认：admin123），用于Web管理界面
+
+### 数据加密配置（可选）
+- `ENCRYPTION_KEY` - API密钥加密密钥，32字节的Fernet加密密钥
+- `SESSION_SECRET_KEY` - 会话加密密钥，64字符的十六进制字符串
+
+### Web服务器配置（可选）
+- `WEB_PORT` - Web服务器端口（默认：3000）
+
+### AI服务商配置（建议）
+- `ANTHROPIC_MAX_TOKENS` - Claude模型最大token数限制（默认：32000）
+- `OPENAI_REASONING_MAX_TOKENS` - OpenAI思考模型max_completion_tokens默认值（默认：32000）
+
+### 思考预算映射配置（建议，若不设置，在设置思考预算时可能会出错）
+- `OPENAI_LOW_TO_ANTHROPIC_TOKENS` - OpenAI low等级对应的Anthropic token数（默认：2048）
+- `OPENAI_MEDIUM_TO_ANTHROPIC_TOKENS` - OpenAI medium等级对应的Anthropic token数（默认：8192）
+- `OPENAI_HIGH_TO_ANTHROPIC_TOKENS` - OpenAI high等级对应的Anthropic token数（默认：16384）
+- `OPENAI_LOW_TO_GEMINI_TOKENS` - OpenAI low等级对应的Gemini token数（默认：2048）
+- `OPENAI_MEDIUM_TO_GEMINI_TOKENS` - OpenAI medium等级对应的Gemini token数（默认：8192）
+- `OPENAI_HIGH_TO_GEMINI_TOKENS` - OpenAI high等级对应的Gemini token数（默认：16384）
+- `ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD` - Anthropic token数判断为low的阈值（默认：2048）
+- `ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD` - Anthropic token数判断为high的阈值（默认：16384）
+- `GEMINI_TO_OPENAI_LOW_REASONING_THRESHOLD` - Gemini token数判断为low的阈值（默认：2048）
+- `GEMINI_TO_OPENAI_HIGH_REASONING_THRESHOLD` - Gemini token数判断为high的阈值（默认：16384）
+
+### 数据库配置（可选）
+- `DATABASE_PATH` - SQLite数据库文件路径（默认：data/channels.db）
+
+### 日志配置（可选）
+- `LOG_LEVEL` - 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL，默认：WARNING）
+- `LOG_FILE` - 日志文件路径（默认：logs/app.log）
+- `LOG_MAX_DAYS` - 日志文件保留天数（默认：1天）
 
 ## 🔧 客户端集成指南
 
@@ -188,205 +236,9 @@ python web_server.py --debug
 | 函数调用 | 工具使用能力 | ✅ | ✅ | ✅ |
 | 结构化输出 | JSON格式输出 | ✅ | ✅ | ✅ |
 | 视觉理解 | 图像分析能力 | ✅ | ✅ | ✅ |
+| 思考预算 | 智能思考功能 | ✅ | ✅ | ✅ |
 
----
 
 ## 📄 许可证
-
-MIT License
-
----
-
-## <a name="english-version"></a>English Version
-
-<div align="right">
-  <a href="#english-version">🇺🇸 English</a> | 
-  <a href="#chinese-version">🇨🇳 中文</a>
-</div>
-
-# Multi-Channel AI API Unified Conversion Proxy System
-
-## 📖 Project Overview
-
-This is a multi-channel AI API unified conversion proxy system that supports mutual conversion between OpenAI, Anthropic Claude, and Google Gemini API formats, with multi-channel management and comprehensive capability detection features.
-
-![image-20250727163506047](./images/image-20250727163506047.png)
-
-🔄 System Working Principle
-
-### Core Conversion Flow
-```mermaid
-graph LR
-    A[Client Request] --> B{Format Recognition}
-    B --> C[Channel Routing]
-    C --> D[Format Conversion]
-    D --> E[Request Forwarding]
-    E --> F[AI Service API]
-    F --> G[Response Conversion]
-    G --> H[Return to Client]
-```
-
-#### 🎯 1. Format Recognition
-- **Auto Detection**: Automatically identify source API format based on request path and parameters
-- **Supported Formats**: OpenAI `/v1/chat/completions` | Anthropic `/v1/messages` | Gemini `/v1/models`
-- **Smart Parsing**: Parse request headers and parameter structure to determine source format specification
-
-#### 🚀 2. Channel Routing
-- **Key Mapping**: Find target channel configuration based on custom API Key
-- **Load Balancing**: Support multi-channel polling and weight allocation
-- **Failover**: Automatically switch to backup channels to ensure service availability
-
-#### ⚡ 3. Format Conversion
-- **Request Conversion**: Convert source format request body to target API format
-- **Parameter Mapping**: Automatically handle differences in model names and parameter structures
-- **Compatibility Handling**: Maintain integrity of all advanced features
-
-#### 🌐 4. Request Forwarding
-- **HTTP Proxy**: Transparently forward to real AI service APIs
-- **Authentication Handling**: Automatically inject target channel's API Key and authentication info
-- **Timeout Control**: Configurable request timeout and retry mechanisms
-
-#### 🔄 5. Response Conversion
-- **Format Unification**: Convert target API response back to source format
-- **Streaming Support**: Full support for SSE streaming response format conversion
-- **Error Mapping**: Unified error codes and error message formats
-
-## 🎯 Core Features
-
-### 1. Comprehensive Capability Detection
-- **Basic Capabilities**: Chat conversation, streaming output, system messages, multi-turn dialogue
-- **Advanced Capabilities**: Vision understanding, file upload, structured output, JSON mode
-- **Tool Capabilities**: Function calling, tool usage, code execution
-- **Model Detection**: Automatically retrieve supported model lists
-- **Multi-Platform Support**: OpenAI, Anthropic Claude, Google Gemini
-
-### 2. Smart Format Conversion
-```bash
-# Supported conversion paths
-OpenAI ↔ Anthropic ↔ Gemini
-  ↑         ↑         ↑
-  └─────────┼─────────┘
-            │
-     Any mutual conversion
-```
-
-**Supported advanced feature conversions:**
-- ✅ **Streaming Response**: Complete conversion of SSE format
-- ✅ **Function Calling**: Tool Calling cross-platform mapping
-- ✅ **Vision Understanding**: Unified processing of image input formats
-- ✅ **Structured Output**: Automatic JSON Schema adaptation
-- ✅ **Model Mapping**: Smart model name conversion
-
-## 🚀 Quick Start
-
-1. **Install Dependencies**
-```bash
-pip install -r requirements.txt
-```
-
-2. **Start Web Service**
-```bash
-python web_server.py
-```
-
-3. **Access Web Interface**
-- Open browser and visit: http://localhost:3000
-- Select AI provider, input API configuration
-- One-click detection of all capabilities, view detailed results
-- Use conversion functionality, see system working principle for details
-
-## 🔧 Client Integration Guide
-
-### Using with Claude Code
-
-#### Mac
-```bash
-export ANTHROPIC_BASE_URL="https://your_url.com"
-# Testing found that claude code requires keys to start with sk-
-export ANTHROPIC_API_KEY="sk-xxx"
-claude --model your_model
-```
-
-#### Windows CMD
-```cmd
-set ANTHROPIC_BASE_URL=https://your_url.com
-# Testing found that claude code requires keys to start with sk-
-set ANTHROPIC_API_KEY=sk-xxx
-claude --model your_model
-```
-
-### Using with Gemini-CLI
-
-#### Mac
-```bash
-export GOOGLE_GEMINI_BASE_URL="https://your_url.com"
-export GEMINI_API_KEY="your_api_key"
-gemini -m your_model
-```
-
-#### Windows CMD
-```cmd
-set GOOGLE_GEMINI_BASE_URL=https://your_url.com
-set GEMINI_API_KEY=your_api_key
-gemini -m your_model
-```
-
-### Using with Cherry Studio
-> Select the provider format you want to convert, fill in the URL, and enter the key for the channel you want to use
-
-## 🚢 Deployment Guide
-
-### Docker Deployment
-
-```bash
-# Build image
-docker build -t ai-api-detector .
-
-# Run container
-docker run -p 8000:8000 ai-api-detector
-```
-
-### Local Development
-
-```bash
-# Clone project
-git clone <repository-url>
-cd Api-Conversion
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Start development server
-python web_server.py --debug
-```
-
-### Render Platform Deployment 
-
-The project is pre-configured with `render.yaml` for one-click deployment:
-
-1. **Push code to GitHub**
-2. **Connect Render platform**: https://dashboard.render.com
-3. **Auto Deploy**: Render will automatically read configuration and deploy
-
-**Configuration Details:**
-
-- **Build Command**: `pip install -r requirements.txt`
-- **Start Command**: `python web_server.py --host 0.0.0.0 --port $PORT`
-- **Environment Variables**: `PYTHONPATH=/opt/render/project/src`
-
-## 📊 Supported Capability Detection
-
-| Capability | Description | OpenAI | Anthropic | Gemini |
-|------------|-------------|--------|-----------|--------|
-| Basic Chat | Basic conversation functionality | ✅ | ✅ | ✅ |
-| Streaming Output | Real-time streaming response | ✅ | ✅ | ✅ |
-| System Messages | System instruction support | ✅ | ✅ | ✅ |
-| Function Calling | Tool usage capability | ✅ | ✅ | ✅ |
-| Structured Output | JSON format output | ✅ | ✅ | ✅ |
-| Vision Understanding | Image analysis capability | ✅ | ✅ | ✅ |
-
----
-
-## 📄 License
 
 MIT License
