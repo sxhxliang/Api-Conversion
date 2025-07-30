@@ -160,8 +160,7 @@ class OpenAIConverter(BaseConverter):
         # Anthropic 要求必须有 max_tokens，按优先级处理：
         # 1. 传入的max_tokens（最高优先级）
         # 2. 环境变量ANTHROPIC_MAX_TOKENS
-        # 3. 基于模型的自动设置
-        # 4. 如果都没有且是未知模型，则报错
+        # 3. 都没有则报错
         if "max_tokens" in data:
             # 优先级1：使用传入的max_tokens
             result_data["max_tokens"] = data["max_tokens"]
@@ -176,25 +175,11 @@ class OpenAIConverter(BaseConverter):
                     result_data["max_tokens"] = max_tokens
                 except ValueError:
                     self.logger.warning(f"Invalid ANTHROPIC_MAX_TOKENS value '{env_max_tokens}', must be integer")
-                    # 继续使用基于模型的自动设置
                     env_max_tokens = None
             
             if not env_max_tokens:
-                # 优先级3：根据模型自动设置最大max_tokens
-                model = result_data["model"]
-                if "claude-opus-4" in model or "claude-4-opus" in model:
-                    max_tokens = 32000
-                elif "claude-sonnet-4" in model or "claude-4-sonnet" in model or "claude-sonnet-3.7" in model:
-                    max_tokens = 64000
-                elif "claude-sonnet-3.5" in model or "claude-haiku-3.5" in model:
-                    max_tokens = 8192
-                elif "claude-opus-3" in model or "claude-haiku-3" in model or "claude-3" in model:
-                    max_tokens = 4096
-                else:
-                    # 未知模型，报错要求明确指定max_tokens
-                    raise ValueError(f"Unknown Claude model '{model}'. Please specify max_tokens in the request or set ANTHROPIC_MAX_TOKENS environment variable.")
-                
-                result_data["max_tokens"] = max_tokens
+                # 优先级3：都没有则报错，要求用户明确指定
+                raise ValueError(f"max_tokens is required for Anthropic API. Please specify max_tokens in the request or set ANTHROPIC_MAX_TOKENS environment variable.")
         
         if "temperature" in data:
             result_data["temperature"] = data["temperature"]
@@ -217,6 +202,49 @@ class OpenAIConverter(BaseConverter):
                         "input_schema": func.get("parameters", {})
                     })
             result_data["tools"] = anthropic_tools
+        
+        # 处理思考预算转换 (OpenAI reasoning_effort -> Anthropic thinkingBudget)
+        if "reasoning_effort" in data:
+            reasoning_effort = data["reasoning_effort"]
+            self.logger.info(f"🧠 [THINKING BUDGET] 检测到OpenAI reasoning_effort参数: '{reasoning_effort}'")
+            
+            # 根据环境变量映射reasoning_effort到具体的token数值
+            import os
+            thinking_budget = None
+            env_key = None
+            
+            if reasoning_effort == "low":
+                env_key = "OPENAI_LOW_TO_ANTHROPIC_TOKENS"
+                env_value = os.environ.get(env_key)
+            elif reasoning_effort == "medium":
+                env_key = "OPENAI_MEDIUM_TO_ANTHROPIC_TOKENS"
+                env_value = os.environ.get(env_key)
+            elif reasoning_effort == "high":
+                env_key = "OPENAI_HIGH_TO_ANTHROPIC_TOKENS"
+                env_value = os.environ.get(env_key)
+            
+            self.logger.info(f"🔍 [THINKING BUDGET] 查找环境变量: {env_key}")
+            
+            if not env_value:
+                self.logger.error(f"❌ [THINKING BUDGET] 环境变量未配置: {env_key}")
+                raise ConversionError(f"环境变量 {env_key} 未配置。请在.env文件中设置该参数以支持OpenAI reasoning_effort到Anthropic thinkingBudget的转换。")
+            
+            self.logger.info(f"✅ [THINKING BUDGET] 环境变量获取成功: {env_key} = {env_value}")
+            
+            try:
+                thinking_budget = int(env_value)
+                self.logger.info(f"✅ [THINKING BUDGET] token数值解析成功: {thinking_budget}")
+            except ValueError:
+                self.logger.error(f"❌ [THINKING BUDGET] token数值解析失败: '{env_value}' 不是有效整数")
+                raise ConversionError(f"环境变量 {env_key} 的值 '{env_value}' 不是有效的整数。")
+            
+            if thinking_budget:
+                result_data["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": thinking_budget
+                }
+                self.logger.info(f"🎯 [THINKING BUDGET] 转换完成: OpenAI reasoning_effort '{reasoning_effort}' -> Anthropic thinkingBudget {thinking_budget}")
+                self.logger.info(f"📤 [THINKING BUDGET] Anthropic请求将包含: {{\"thinking\": {{\"type\": \"enabled\", \"budget_tokens\": {thinking_budget}}}}}")
         
         return ConversionResult(success=True, data=result_data)
     
@@ -333,8 +361,25 @@ class OpenAIConverter(BaseConverter):
             generation_config["temperature"] = data["temperature"]
         if "top_p" in data:
             generation_config["topP"] = data["top_p"]
+        
+        # 处理maxOutputTokens（Gemini的max_tokens等价字段）
+        # 优先级：客户端max_tokens > 环境变量ANTHROPIC_MAX_TOKENS > 不设置（让Gemini使用默认值）
         if "max_tokens" in data:
+            # 优先使用客户端传入的max_tokens
             generation_config["maxOutputTokens"] = data["max_tokens"]
+        else:
+            # 如果客户端没有传max_tokens，检查环境变量ANTHROPIC_MAX_TOKENS
+            import os
+            env_max_tokens = os.environ.get("ANTHROPIC_MAX_TOKENS")
+            if env_max_tokens:
+                try:
+                    max_tokens = int(env_max_tokens)
+                    generation_config["maxOutputTokens"] = max_tokens
+                    self.logger.info(f"Using ANTHROPIC_MAX_TOKENS for Gemini maxOutputTokens: {max_tokens}")
+                except ValueError:
+                    self.logger.warning(f"Invalid ANTHROPIC_MAX_TOKENS value '{env_max_tokens}', must be integer")
+                    # 不设置maxOutputTokens，让Gemini使用默认值
+        
         if "stop" in data:
             generation_config["stopSequences"] = data["stop"] if isinstance(data["stop"], list) else [data["stop"]]
         
@@ -365,6 +410,49 @@ class OpenAIConverter(BaseConverter):
             if "json_schema" in data["response_format"]:
                 generation_config["response_schema"] = data["response_format"]["json_schema"].get("schema", {})
             result_data["generationConfig"] = generation_config
+        
+        # 处理思考预算转换 (OpenAI reasoning_effort -> Gemini thinkingBudget)
+        if "reasoning_effort" in data:
+            reasoning_effort = data["reasoning_effort"]
+            self.logger.info(f"🧠 [THINKING BUDGET] 检测到OpenAI reasoning_effort参数: '{reasoning_effort}'")
+            
+            # 根据环境变量映射reasoning_effort到具体的token数值
+            import os
+            thinking_budget = None
+            env_key = None
+            
+            if reasoning_effort == "low":
+                env_key = "OPENAI_LOW_TO_GEMINI_TOKENS"
+                env_value = os.environ.get(env_key)
+            elif reasoning_effort == "medium":
+                env_key = "OPENAI_MEDIUM_TO_GEMINI_TOKENS"
+                env_value = os.environ.get(env_key)
+            elif reasoning_effort == "high":
+                env_key = "OPENAI_HIGH_TO_GEMINI_TOKENS"
+                env_value = os.environ.get(env_key)
+            
+            self.logger.info(f"🔍 [THINKING BUDGET] 查找环境变量: {env_key}")
+            
+            if not env_value:
+                self.logger.error(f"❌ [THINKING BUDGET] 环境变量未配置: {env_key}")
+                raise ConversionError(f"环境变量 {env_key} 未配置。请在.env文件中设置该参数以支持OpenAI reasoning_effort到Gemini thinkingBudget的转换。")
+            
+            self.logger.info(f"✅ [THINKING BUDGET] 环境变量获取成功: {env_key} = {env_value}")
+            
+            try:
+                thinking_budget = int(env_value)
+                self.logger.info(f"✅ [THINKING BUDGET] token数值解析成功: {thinking_budget}")
+            except ValueError:
+                self.logger.error(f"❌ [THINKING BUDGET] token数值解析失败: '{env_value}' 不是有效整数")
+                raise ConversionError(f"环境变量 {env_key} 的值 '{env_value}' 不是有效的整数。")
+            
+            if thinking_budget:
+                generation_config["thinkingConfig"] = {
+                    "thinkingBudget": thinking_budget
+                }
+                result_data["generationConfig"] = generation_config
+                self.logger.info(f"🎯 [THINKING BUDGET] 转换完成: OpenAI reasoning_effort '{reasoning_effort}' -> Gemini thinkingBudget {thinking_budget}")
+                self.logger.info(f"📤 [THINKING BUDGET] Gemini请求将包含: {{\"generationConfig\": {{\"thinkingConfig\": {{\"thinkingBudget\": {thinking_budget}}}}}}}")
         
         return ConversionResult(success=True, data=result_data)
     

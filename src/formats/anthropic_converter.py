@@ -42,13 +42,58 @@ class AnthropicConverter(BaseConverter):
         self.original_model = None
         self._tool_id_mapping = {}  # 存储tool_use_id到function_name的映射
         
-        # 初始化 logger
-        import logging
-        self.logger = logging.getLogger(__name__)
+        # 使用统一的日志设置（继承自BaseConverter）
+        # self.logger 已经在 BaseConverter.__init__() 中正确设置
     
     def set_original_model(self, model: str):
         """设置原始模型名称"""
         self.original_model = model
+    
+    def _determine_reasoning_effort_from_budget(self, budget_tokens: Optional[int]) -> str:
+        """根据budget_tokens智能判断OpenAI reasoning_effort等级
+        
+        Args:
+            budget_tokens: Anthropic thinking的budget_tokens值
+            
+        Returns:
+            str: OpenAI reasoning_effort等级 ("low", "medium", "high")
+        """
+        import os
+        
+        # 如果没有提供budget_tokens，默认为high
+        if budget_tokens is None:
+            self.logger.info("No budget_tokens provided, defaulting to reasoning_effort='high'")
+            return "high"
+        
+        # 从环境变量获取阈值配置
+        low_threshold_str = os.environ.get("ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD")
+        high_threshold_str = os.environ.get("ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD")
+        
+        # 检查必需的环境变量
+        if low_threshold_str is None:
+            raise ConversionError("ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD environment variable is required for intelligent reasoning_effort determination")
+        
+        if high_threshold_str is None:
+            raise ConversionError("ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD environment variable is required for intelligent reasoning_effort determination")
+        
+        try:
+            low_threshold = int(low_threshold_str)
+            high_threshold = int(high_threshold_str)
+            
+            self.logger.debug(f"Threshold configuration: low <= {low_threshold}, medium <= {high_threshold}, high > {high_threshold}")
+            
+            if budget_tokens <= low_threshold:
+                effort = "low"
+            elif budget_tokens <= high_threshold:
+                effort = "medium"
+            else:
+                effort = "high"
+            
+            self.logger.info(f"🎯 Budget tokens {budget_tokens} -> reasoning_effort '{effort}' (thresholds: low<={low_threshold}, high<={high_threshold})")
+            return effort
+            
+        except ValueError as e:
+            raise ConversionError(f"Invalid threshold values in environment variables: {e}. ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD and ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD must be integers.")
     
     def reset_streaming_state(self):
         """重置所有流式相关的状态变量，避免状态污染"""
@@ -255,6 +300,44 @@ class AnthropicConverter(BaseConverter):
             result_data["tools"] = openai_tools
             result_data["tool_choice"] = "auto"
         
+        # 处理思考预算转换 (Anthropic thinking -> OpenAI reasoning_effort + max_completion_tokens)
+        if "thinking" in data and data["thinking"].get("type") == "enabled":
+            # 检测到思考参数，设置为OpenAI思考模型格式
+            budget_tokens = data["thinking"].get("budget_tokens")
+            
+            # 根据budget_tokens智能判断reasoning_effort等级
+            reasoning_effort = self._determine_reasoning_effort_from_budget(budget_tokens)
+            result_data["reasoning_effort"] = reasoning_effort
+            
+            # 处理max_completion_tokens的优先级逻辑
+            max_completion_tokens = None
+            
+            # 优先级1：客户端传入的max_tokens
+            if "max_tokens" in data:
+                max_completion_tokens = data["max_tokens"]
+                result_data.pop("max_tokens", None)  # 移除max_tokens，使用max_completion_tokens
+                self.logger.info(f"Using client max_tokens as max_completion_tokens: {max_completion_tokens}")
+            else:
+                # 优先级2：环境变量OPENAI_REASONING_MAX_TOKENS
+                import os
+                env_max_tokens = os.environ.get("OPENAI_REASONING_MAX_TOKENS")
+                if env_max_tokens:
+                    try:
+                        max_completion_tokens = int(env_max_tokens)
+                        self.logger.info(f"Using OPENAI_REASONING_MAX_TOKENS from environment: {max_completion_tokens}")
+                    except ValueError:
+                        self.logger.warning(f"Invalid OPENAI_REASONING_MAX_TOKENS value '{env_max_tokens}', must be integer")
+                        env_max_tokens = None
+                
+                if not env_max_tokens:
+                    # 优先级3：都没有则报错
+                    raise ConversionError("For OpenAI reasoning models, max_completion_tokens is required. Please specify max_tokens in the request or set OPENAI_REASONING_MAX_TOKENS environment variable.")
+            
+            result_data["max_completion_tokens"] = max_completion_tokens
+            self.logger.info(f"Anthropic thinking enabled -> OpenAI reasoning_effort='{reasoning_effort}', max_completion_tokens={max_completion_tokens}")
+            if budget_tokens:
+                self.logger.info(f"Budget tokens: {budget_tokens} -> reasoning_effort: '{reasoning_effort}'")
+        
         return ConversionResult(success=True, data=result_data)
     
     def _convert_to_gemini_request(self, data: Dict[str, Any]) -> ConversionResult:
@@ -331,6 +414,21 @@ class AnthropicConverter(BaseConverter):
             generation_config["maxOutputTokens"] = data["max_tokens"]
         if "stop_sequences" in data:
             generation_config["stopSequences"] = data["stop_sequences"]
+        
+        # 处理思考预算转换 (Anthropic thinkingBudget -> Gemini thinkingBudget)
+        if "thinking" in data and data["thinking"].get("type") == "enabled":
+            budget_tokens = data["thinking"].get("budget_tokens")
+            if budget_tokens:
+                generation_config["thinkingConfig"] = {
+                    "thinkingBudget": budget_tokens
+                }
+                self.logger.info(f"Anthropic thinkingBudget {budget_tokens} -> Gemini thinkingBudget {budget_tokens}")
+            elif "thinking" in data:
+                # 如果没有设置budget_tokens，对应Gemini的-1（动态思考）
+                generation_config["thinkingConfig"] = {
+                    "thinkingBudget": -1
+                }
+                self.logger.info("Anthropic thinking enabled without budget -> Gemini thinkingBudget -1 (dynamic)")
         
         # 确保 generationConfig 永远存在，避免 Gemini 2.0+ 的 500 错误
         result_data["generationConfig"] = generation_config or {}
@@ -536,14 +634,14 @@ class AnthropicConverter(BaseConverter):
         return ConversionResult(success=True, data=result_data)
     
     def _convert_from_openai_streaming_chunk(self, data: Dict[str, Any]) -> ConversionResult:
-        """转换OpenAI流式响应chunk到Anthropic SSE格式 - 基于claude-code-router实现"""
+        """转换OpenAI流式响应chunk到Anthropic SSE格式 """
         import json, time, random
         
         # 首先验证原始模型名称，确保在状态初始化之前就检查
         if not self.original_model:
             raise ValueError("Original model name is required for streaming response conversion")
         
-        # 初始化流状态 - 严格按照claude-code-router模式
+        # 初始化流状态 
         if not hasattr(self, '_streaming_state') or getattr(self, '_force_reset', False):
             # 清理可能残留的状态，避免状态污染
             for attr in ['_gemini_sent_start', '_gemini_stream_id', '_gemini_text_started', '_force_reset']:
@@ -1065,8 +1163,6 @@ class AnthropicConverter(BaseConverter):
     def _parse_anthropic_sse_event(self, sse_data: str) -> ConversionResult:
         """解析Anthropic SSE事件数据，提取事件类型和数据
         
-        基于claude-to-chatgpt项目的正则表达式实现
-        参考: cloudflare-worker.js中的regex pattern
         """
         import re
         import json

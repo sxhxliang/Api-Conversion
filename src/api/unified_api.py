@@ -4,6 +4,7 @@
 """
 import json
 import time
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, Depends, Header
@@ -20,6 +21,298 @@ from src.utils.exceptions import ChannelNotFoundError, ConversionError, APIError
 logger = setup_logger("unified_api")
 
 router = APIRouter()
+
+
+async def fetch_models_from_channel_for_format(channel: ChannelInfo, target_format: str) -> List[Dict[str, Any]]:
+    """从目标渠道获取模型列表并转换为指定格式"""
+    try:
+        logger.info(f"Fetching models from {channel.provider} channel for {target_format} format")
+        
+        # 先获取原始模型数据
+        raw_models = await fetch_raw_models_from_channel(channel)
+        
+        # 根据目标格式转换
+        if target_format == "openai":
+            return convert_models_to_openai_format(raw_models, channel.provider)
+        elif target_format == "anthropic":
+            return convert_models_to_anthropic_format(raw_models, channel.provider)
+        elif target_format == "gemini":
+            return convert_models_to_gemini_format(raw_models, channel.provider)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported target format: {target_format}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch models for {target_format} format: {e}")
+        logger.exception("Full traceback:")
+        return []
+
+
+async def fetch_models_from_channel(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """从目标渠道获取真实的模型列表并转换为OpenAI格式（向后兼容）"""
+    return await fetch_models_from_channel_for_format(channel, "openai")
+
+
+async def fetch_raw_models_from_channel(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """从目标渠道获取原始模型数据"""
+    try:
+        logger.info(f"Fetching raw models from {channel.provider} channel: {channel.name}")
+        logger.debug(f"Channel details - Base URL: {channel.base_url}, API Key: {mask_api_key(channel.api_key)}")
+        
+        if channel.provider == "openai":
+            raw_models = await fetch_openai_raw_models(channel)
+        elif channel.provider == "anthropic":
+            raw_models = await fetch_anthropic_raw_models(channel) 
+        elif channel.provider == "gemini":
+            raw_models = await fetch_gemini_raw_models(channel)
+        else:
+            logger.error(f"Unknown provider: {channel.provider}")
+            raise HTTPException(status_code=400, detail=f"Unsupported provider: {channel.provider}")
+        
+        logger.info(f"Successfully fetched {len(raw_models)} raw models from {channel.provider} channel")
+        return raw_models
+            
+    except HTTPException:
+        # 重新抛出HTTP异常
+        raise
+    except Exception as e:
+        logger.error(f"Failed to fetch raw models from {channel.provider}: {e}")
+        logger.exception("Full traceback:")  # 记录完整堆栈跟踪
+        # 返回空列表而不是默认模型
+        logger.warning(f"Returning empty model list due to API failure")
+        return []
+
+
+async def fetch_openai_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """获取OpenAI原始模型数据"""
+    logger.info(f"Calling OpenAI models API: {channel.base_url}")
+    
+    url = f"{channel.base_url.rstrip('/')}/models"
+    headers = {
+        "Authorization": f"Bearer {channel.api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            error_msg = f"OpenAI API returned {response.status_code}: {response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        data = response.json()
+        models = data.get("data", [])
+        
+        if not models:
+            logger.warning("OpenAI API returned empty model list")
+        
+        logger.info(f"Retrieved {len(models)} models from OpenAI API")
+        return models
+
+
+# 向后兼容的函数
+async def fetch_openai_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """获取OpenAI模型列表（向后兼容）"""
+    return await fetch_openai_raw_models(channel)
+
+
+async def fetch_anthropic_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """获取Anthropic原始模型数据"""
+    logger.info(f"Calling Anthropic models API: {channel.base_url}")
+    
+    url = f"{channel.base_url.rstrip('/')}/v1/models"
+    headers = {
+        "x-api-key": channel.api_key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json"
+    }
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url, headers=headers)
+        
+        if response.status_code != 200:
+            error_msg = f"Anthropic API returned {response.status_code}: {response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        data = response.json()
+        models = data.get("data", [])
+        
+        if not models:
+            logger.warning("Anthropic API returned empty model list")
+        
+        logger.info(f"Retrieved {len(models)} models from Anthropic API")
+        return models
+
+
+# 向后兼容的函数
+async def fetch_anthropic_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """获取Anthropic模型列表并转换为OpenAI格式（向后兼容）"""
+    raw_models = await fetch_anthropic_raw_models(channel)
+    return convert_models_to_openai_format(raw_models, "anthropic")
+
+
+async def fetch_gemini_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """获取Gemini原始模型数据"""
+    logger.info(f"Calling Gemini models API: {channel.base_url}")
+    
+    url = f"{channel.base_url.rstrip('/')}/models"
+    params = {"key": channel.api_key}
+    
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        response = await client.get(url, params=params)
+        
+        if response.status_code != 200:
+            error_msg = f"Gemini API returned {response.status_code}: {response.text}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        data = response.json()
+        models = data.get("models", [])
+        
+        if not models:
+            logger.warning("Gemini API returned empty model list")
+        
+        logger.info(f"Retrieved {len(models)} models from Gemini API")
+        return models
+
+
+# 向后兼容的函数
+async def fetch_gemini_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
+    """获取Gemini模型列表并转换为OpenAI格式（向后兼容）"""
+    raw_models = await fetch_gemini_raw_models(channel)
+    return convert_models_to_openai_format(raw_models, "gemini")
+
+
+def convert_models_to_openai_format(raw_models: List[Dict[str, Any]], source_provider: str) -> List[Dict[str, Any]]:
+    """将原始模型数据转换为OpenAI格式"""
+    models = []
+    current_time = int(time.time())
+    
+    for model in raw_models:
+        if source_provider == "openai":
+            # OpenAI格式直接返回
+            models.append(model)
+        elif source_provider == "anthropic":
+            # Anthropic格式转换
+            model_id = model.get("id", "")
+            created_at = model.get("created_at", "")
+            
+            # 转换创建时间为timestamp
+            created_timestamp = current_time
+            if created_at:
+                try:
+                    from datetime import datetime
+                    dt = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    created_timestamp = int(dt.timestamp())
+                except (ValueError, AttributeError):
+                    pass
+            
+            models.append({
+                "id": model_id,
+                "object": "model",
+                "created": created_timestamp,
+                "owned_by": "anthropic"
+            })
+        elif source_provider == "gemini":
+            # Gemini格式转换
+            model_name = model.get("name", "")
+            # 移除 "models/" 前缀
+            if model_name.startswith("models/"):
+                model_name = model_name[7:]
+            
+            # 只包含生成模型，过滤掉嵌入模型等
+            supported_methods = model.get("supportedGenerationMethods", [])
+            if "generateContent" in supported_methods:
+                models.append({
+                    "id": model_name,
+                    "object": "model",
+                    "created": current_time,
+                    "owned_by": "google"
+                })
+    
+    return models
+
+
+def convert_models_to_anthropic_format(raw_models: List[Dict[str, Any]], source_provider: str) -> List[Dict[str, Any]]:
+    """将原始模型数据转换为Anthropic格式"""
+    models = []
+    
+    for model in raw_models:
+        if source_provider == "anthropic":
+            # Anthropic格式直接返回
+            models.append(model)
+        elif source_provider == "openai":
+            # OpenAI格式转换
+            models.append({
+                "type": "model",
+                "id": model.get("id", ""),
+                "display_name": model.get("id", ""),
+                "created_at": model.get("created") and datetime.fromtimestamp(model["created"]).isoformat() + "Z",
+            })
+        elif source_provider == "gemini":
+            # Gemini格式转换  
+            model_name = model.get("name", "")
+            if model_name.startswith("models/"):
+                model_name = model_name[7:]
+            
+            supported_methods = model.get("supportedGenerationMethods", [])
+            if "generateContent" in supported_methods:
+                models.append({
+                    "type": "model",
+                    "id": model_name,
+                    "display_name": model.get("displayName", model_name),
+                    "created_at": datetime.now().isoformat() + "Z",
+                })
+    
+    return models
+
+
+def convert_models_to_gemini_format(raw_models: List[Dict[str, Any]], source_provider: str) -> List[Dict[str, Any]]:
+    """将原始模型数据转换为Gemini格式"""
+    models = []
+    
+    for model in raw_models:
+        if source_provider == "gemini":
+            # Gemini格式直接返回
+            models.append(model)
+        elif source_provider == "openai":
+            # OpenAI格式转换
+            models.append({
+                "name": f"models/{model.get('id', '')}",
+                "baseModelId": "",
+                "version": "001",
+                "displayName": model.get("id", ""),
+                "description": f"Model from {model.get('owned_by', 'unknown')}",  
+                "inputTokenLimit": 30720,
+                "outputTokenLimit": 8192,
+                "supportedGenerationMethods": ["generateContent", "countTokens"],
+                "temperature": 1.0,
+                "maxTemperature": 2.0,
+                "topP": 0.95,
+                "topK": 64
+            })
+        elif source_provider == "anthropic":
+            # Anthropic格式转换
+            models.append({
+                "name": f"models/{model.get('id', '')}",
+                "baseModelId": "",
+                "version": "001", 
+                "displayName": model.get("display_name", model.get("id", "")),
+                "description": f"Anthropic model: {model.get('id', '')}",
+                "inputTokenLimit": 200000,
+                "outputTokenLimit": 8192,
+                "supportedGenerationMethods": ["generateContent", "countTokens"],
+                "temperature": 1.0,
+                "maxTemperature": 1.0,
+                "topP": 0.95,
+                "topK": 40
+            })
+    
+    return models
+
 
 
 def extract_openai_api_key(authorization: Optional[str] = Header(None)) -> str:
@@ -535,49 +828,95 @@ async def unified_openai_format_endpoint(
     return await handle_unified_request(request, api_key, source_format="openai")
 
 
-@router.post("/v1/models")
-async def list_models(api_key: str = Depends(extract_openai_api_key)):
-    """列出可用模型"""
+
+
+# 统一的模型列表端点：根据认证方式自动识别格式
+@router.get("/v1/models")
+async def list_models_unified(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="x-api-key")
+):
+    """统一的模型列表端点，根据认证方式自动识别OpenAI或Anthropic格式"""
     try:
+        # 根据认证方式确定格式和API key
+        if authorization and authorization.startswith("Bearer "):
+            # OpenAI格式认证
+            api_key = authorization[7:]
+            target_format = "openai"
+            logger.info(f"OpenAI format models request with API key: {mask_api_key(api_key)}")
+        elif x_api_key:
+            # Anthropic格式认证
+            api_key = x_api_key
+            target_format = "anthropic"
+            logger.info(f"Anthropic format models request with API key: {mask_api_key(api_key)}")
+        else:
+            raise HTTPException(status_code=401, detail="Missing authorization header")
+        
         channel = channel_manager.get_channel_by_custom_key(api_key)
         if not channel:
+            logger.error(f"No channel found for API key: {mask_api_key(api_key)}")
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        # 返回OpenAI格式的模型列表
-        models = []
-        if channel.models_mapping:
-            for openai_model, target_model in channel.models_mapping.items():
-                models.append({
-                    "id": openai_model,
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": channel.provider
-                })
-        else:
-            # 默认模型映射
-            default_models = {
-                "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"],
-                "anthropic": ["gpt-4o", "gpt-4", "gpt-3.5-turbo"],  # 映射到OpenAI模型名
-                "gemini": ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]
+        logger.info(f"Found channel: {channel.name} (provider: {channel.provider})")
+        
+        # 从目标渠道获取真实的模型列表，转换为指定格式
+        models = await fetch_models_from_channel_for_format(channel, target_format)
+        
+        logger.info(f"Returning {len(models)} {target_format} format models")
+        
+        # 根据格式返回不同的响应结构
+        if target_format == "openai":
+            return {
+                "object": "list",
+                "data": models
             }
-            
-            for model_name in default_models.get(channel.provider, []):
-                models.append({
-                    "id": model_name,
-                    "object": "model", 
-                    "created": int(time.time()),
-                    "owned_by": channel.provider
-                })
+        else:  # anthropic
+            return {
+                "data": models,
+                "has_more": False,
+                "first_id": models[0]["id"] if models else None,
+                "last_id": models[-1]["id"] if models else None
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unified models list failed: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Gemini格式：列出可用模型  
+@router.get("/v1beta/models")
+async def list_gemini_models(api_key: str = Depends(extract_gemini_api_key)):
+    """Gemini格式：列出可用模型"""
+    try:
+        logger.info(f"Gemini format models request with API key: {mask_api_key(api_key)}")
+        
+        channel = channel_manager.get_channel_by_custom_key(api_key)
+        if not channel:
+            logger.error(f"No channel found for API key: {mask_api_key(api_key)}")
+            raise HTTPException(status_code=401, detail="Invalid API key")
+        
+        logger.info(f"Found channel: {channel.name} (provider: {channel.provider})")
+        
+        # 从目标渠道获取真实的模型列表，转换为Gemini格式
+        models = await fetch_models_from_channel_for_format(channel, "gemini")
+        
+        logger.info(f"Returning {len(models)} Gemini format models")
         
         return {
-            "object": "list",
-            "data": models
+            "models": models
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"List models failed: {e}")
+        logger.error(f"Gemini format list models failed: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

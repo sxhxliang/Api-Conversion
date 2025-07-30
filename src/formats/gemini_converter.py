@@ -20,6 +20,53 @@ class GeminiConverter(BaseConverter):
         """设置原始模型名称"""
         self.original_model = model
     
+    def _determine_reasoning_effort_from_budget(self, thinking_budget: Optional[int]) -> str:
+        """根据thinkingBudget判断OpenAI reasoning_effort等级
+        
+        Args:
+            thinking_budget: Gemini thinking的thinkingBudget值
+            
+        Returns:
+            str: OpenAI reasoning_effort等级 ("low", "medium", "high")
+        """
+        import os
+        
+        # 如果没有提供thinking_budget或为-1（动态思考），默认为high
+        if thinking_budget is None or thinking_budget == -1:
+            reason = "dynamic thinking (-1)" if thinking_budget == -1 else "no budget provided"
+            self.logger.info(f"No valid thinkingBudget ({reason}), defaulting to reasoning_effort='high'")
+            return "high"
+        
+        # 从环境变量获取阈值配置
+        low_threshold_str = os.environ.get("GEMINI_TO_OPENAI_LOW_REASONING_THRESHOLD")
+        high_threshold_str = os.environ.get("GEMINI_TO_OPENAI_HIGH_REASONING_THRESHOLD")
+        
+        # 检查必需的环境变量
+        if low_threshold_str is None:
+            raise ConversionError("GEMINI_TO_OPENAI_LOW_REASONING_THRESHOLD environment variable is required for intelligent reasoning_effort determination")
+        
+        if high_threshold_str is None:
+            raise ConversionError("GEMINI_TO_OPENAI_HIGH_REASONING_THRESHOLD environment variable is required for intelligent reasoning_effort determination")
+        
+        try:
+            low_threshold = int(low_threshold_str)
+            high_threshold = int(high_threshold_str)
+            
+            self.logger.debug(f"Threshold configuration: low <= {low_threshold}, medium <= {high_threshold}, high > {high_threshold}")
+            
+            if thinking_budget <= low_threshold:
+                effort = "low"
+            elif thinking_budget <= high_threshold:
+                effort = "medium"
+            else:
+                effort = "high"
+            
+            self.logger.info(f"🎯 Thinking budget {thinking_budget} -> reasoning_effort '{effort}' (thresholds: low<={low_threshold}, high<={high_threshold})")
+            return effort
+            
+        except ValueError as e:
+            raise ConversionError(f"Invalid threshold values in environment variables: {e}. GEMINI_TO_OPENAI_LOW_REASONING_THRESHOLD and GEMINI_TO_OPENAI_HIGH_REASONING_THRESHOLD must be integers.")
+    
     def reset_streaming_state(self):
         """重置所有流式相关的状态变量，避免状态污染"""
         streaming_attrs = [
@@ -272,6 +319,45 @@ class GeminiConverter(BaseConverter):
                 result_data["tools"] = openai_tools
                 result_data["tool_choice"] = "auto"
         
+        # 处理思考预算转换 (Gemini thinkingConfig -> OpenAI reasoning_effort + max_completion_tokens)
+        if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+            thinking_config = data["generationConfig"]["thinkingConfig"]
+            thinking_budget = thinking_config.get("thinkingBudget")
+            
+            if thinking_budget is not None and thinking_budget != 0:
+                # 检测到思考参数，设置为OpenAI思考模型格式
+                reasoning_effort = self._determine_reasoning_effort_from_budget(thinking_budget)
+                result_data["reasoning_effort"] = reasoning_effort
+                
+                # 处理max_completion_tokens的优先级逻辑
+                max_completion_tokens = None
+                
+                # 优先级1：客户端传入的maxOutputTokens
+                if "generationConfig" in data and "maxOutputTokens" in data["generationConfig"]:
+                    max_completion_tokens = data["generationConfig"]["maxOutputTokens"]
+                    # 移除max_tokens，使用max_completion_tokens
+                    if "max_tokens" in result_data:
+                        result_data.pop("max_tokens", None)
+                    self.logger.info(f"Using client maxOutputTokens as max_completion_tokens: {max_completion_tokens}")
+                else:
+                    # 优先级2：环境变量OPENAI_REASONING_MAX_TOKENS
+                    import os
+                    env_max_tokens = os.environ.get("OPENAI_REASONING_MAX_TOKENS")
+                    if env_max_tokens:
+                        try:
+                            max_completion_tokens = int(env_max_tokens)
+                            self.logger.info(f"Using OPENAI_REASONING_MAX_TOKENS from environment: {max_completion_tokens}")
+                        except ValueError:
+                            self.logger.warning(f"Invalid OPENAI_REASONING_MAX_TOKENS value '{env_max_tokens}', must be integer")
+                            env_max_tokens = None
+                    
+                    if not env_max_tokens:
+                        # 优先级3：都没有则报错
+                        raise ConversionError("For OpenAI reasoning models, max_completion_tokens is required. Please specify maxOutputTokens in generationConfig or set OPENAI_REASONING_MAX_TOKENS environment variable.")
+                
+                result_data["max_completion_tokens"] = max_completion_tokens
+                self.logger.info(f"Gemini thinkingBudget {thinking_budget} -> OpenAI reasoning_effort='{reasoning_effort}', max_completion_tokens={max_completion_tokens}")
+        
         # 处理流式参数 - 关键修复！
         if "stream" in data:
             result_data["stream"] = data["stream"]
@@ -343,8 +429,7 @@ class GeminiConverter(BaseConverter):
         # Anthropic 要求必须有 max_tokens，按优先级处理：
         # 1. Gemini generationConfig中的maxOutputTokens（最高优先级）
         # 2. 环境变量ANTHROPIC_MAX_TOKENS
-        # 3. 基于模型的自动设置
-        # 4. 如果都没有且是未知模型，则报错
+        # 3. 都没有则报错
         if "max_tokens" not in result_data:
             # 优先级2：检查环境变量ANTHROPIC_MAX_TOKENS
             import os
@@ -356,27 +441,11 @@ class GeminiConverter(BaseConverter):
                     result_data["max_tokens"] = max_tokens
                 except ValueError:
                     self.logger.warning(f"Invalid ANTHROPIC_MAX_TOKENS value '{env_max_tokens}', must be integer")
-                    # 继续使用基于模型的自动设置
                     env_max_tokens = None
             
             if not env_max_tokens:
-                # 优先级3：根据模型自动设置最大max_tokens
-                model = result_data["model"]
-                if "claude-opus-4" in model or "claude-4-opus" in model:
-                    max_tokens = 32000
-                elif "claude-sonnet-4" in model or "claude-4-sonnet" in model or "claude-sonnet-3.7" in model:
-                    max_tokens = 64000
-                elif "claude-neptune-v3" in model:
-                    max_tokens = 8192
-                elif "claude-sonnet-3.5" in model or "claude-haiku-3.5" in model:
-                    max_tokens = 8192
-                elif "claude-opus-3" in model or "claude-haiku-3" in model or "claude-3" in model:
-                    max_tokens = 4096
-                else:
-                    # 未知模型，报错要求明确指定max_tokens
-                    raise ValueError(f"Unknown Claude model '{model}'. Please specify max_tokens in generationConfig.maxOutputTokens or set ANTHROPIC_MAX_TOKENS environment variable.")
-                
-                result_data["max_tokens"] = max_tokens
+                # 优先级3：都没有则报错，要求用户明确指定
+                raise ValueError(f"max_tokens is required for Anthropic API. Please specify max_tokens in generationConfig.maxOutputTokens or set ANTHROPIC_MAX_TOKENS environment variable.")
         
         # 处理工具调用
         if "tools" in data:
@@ -396,6 +465,29 @@ class GeminiConverter(BaseConverter):
                         })
             if anthropic_tools:
                 result_data["tools"] = anthropic_tools
+        
+        # 处理思考预算转换 (Gemini thinkingBudget -> Anthropic thinkingBudget)
+        if "generationConfig" in data and "thinkingConfig" in data["generationConfig"]:
+            thinking_config = data["generationConfig"]["thinkingConfig"]
+            thinking_budget = thinking_config.get("thinkingBudget")
+            
+            if thinking_budget is not None:
+                if thinking_budget == -1:
+                    # 动态思考，启用但不设置具体token数
+                    result_data["thinking"] = {
+                        "type": "enabled"
+                    }
+                    self.logger.info("Gemini thinkingBudget -1 (dynamic) -> Anthropic thinking enabled without budget")
+                elif thinking_budget == 0:
+                    # 不启用思考
+                    pass
+                else:
+                    # 数值型思考预算，直接转换
+                    result_data["thinking"] = {
+                        "type": "enabled",
+                        "budget_tokens": thinking_budget
+                    }
+                    self.logger.info(f"Gemini thinkingBudget {thinking_budget} -> Anthropic thinkingBudget {thinking_budget}")
         
         # 处理流式参数 - 关键修复！
         if "stream" in data:
