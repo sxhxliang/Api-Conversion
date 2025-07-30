@@ -22,6 +22,42 @@ jobs:
       - name: Generate release notes
         id: changelog
         uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: |
+            categories:
+              - title: '🚀 新功能'
+                labels:
+                  - 'feat'
+                  - 'feature'
+              - title: '🐛 Bug修复'
+                labels:
+                  - 'fix'
+                  - 'bugfix'
+              - title: '📚 文档更新'
+                labels:
+                  - 'docs'
+                  - 'documentation'
+              - title: '⚡ 性能优化'
+                labels:
+                  - 'perf'
+                  - 'performance'
+              - title: '🔧 其他改进'
+                labels:
+                  - 'chore'
+                  - 'refactor'
+            template: |
+              ## 更新内容
+
+              #{{CHANGELOG}}
+
+              **完整变更**: #{{UNCATEGORIZED}}
+            pr_template: |
+              - #{{TITLE}} by @#{{AUTHOR}} in ##{{NUMBER}}
+            empty_template: |
+              - 初始版本发布
+            transformers:
+              - pattern: '(feat|fix|docs|perf|chore|refactor)(\(.+\))?: (.+)'
+                target: '- $3'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
