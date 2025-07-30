@@ -1,0 +1,77 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*" # 当推送以 "v" 开头的标签时触发（如 v1.0.0, v2.1.0）
+
+jobs:
+  create-release:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: 检出代码库
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Step 2: 自动生成 Release Notes
+      - name: Generate release notes
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v4
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 3: 自动生成 Release
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: "Api-Conversion ${{ github.ref_name }}"
+          body: |
+            ## 🚀 Api-Conversion ${{ github.ref_name }}
+            
+            多渠道AI API统一转换代理系统新版本发布！
+            
+            ### 📦 Docker 镜像
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+            
+            ### 📋 更新内容
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### 🔗 相关链接
+            - [项目文档](https://github.com/${{ github.repository }})
+            - [Docker镜像](https://github.com/${{ github.repository }}/pkgs/container/api-conversion)
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+
+      # Step 4: 构建发布文件
+      - name: Create release archive
+        run: |
+          # 使用 git archive 基于 .gitignore 自动排除文件
+          # 包含所有被 Git 跟踪的文件（包括 images/ 和 .gitignore）
+          git archive --format=zip --prefix=api-conversion-${{ github.ref_name }}/ \
+            --output=api-conversion-${{ github.ref_name }}.zip HEAD
+          
+          # 验证生成的文件
+          echo "📦 生成的发布包内容："
+          unzip -l api-conversion-${{ github.ref_name }}.zip | head -20
+               
+      # Step 5: 上传发布文件
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./api-conversion-${{ github.ref_name }}.zip
+          asset_name: api-conversion-${{ github.ref_name }}.zip
+          asset_content_type: application/zip
