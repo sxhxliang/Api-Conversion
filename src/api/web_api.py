@@ -65,9 +65,34 @@ CapabilityDetectorFactory.register("gemini", GeminiCapabilityDetector)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 全局状态存储
+detection_results: Dict[str, Any] = {}
+detection_progress: Dict[str, Dict[str, Any]] = {}
+task_timestamps: Dict[str, float] = {}
+active_tasks: Dict[str, bool] = {}
 
+# 简单的并发控制
+MAX_CONCURRENT_TASKS = 10
+TASK_EXPIRY_HOURS = 2
+CLEANUP_INTERVAL_MINUTES = 30
 
+import uuid
+import time
+import asyncio
+from fastapi import BackgroundTasks
 
+class DetectionRequest(BaseModel):
+    """检测请求模型"""
+    provider: str
+    base_url: str
+    api_key: str
+    timeout: int = 30
+    capabilities: Optional[List[str]] = None
+    target_model: str
+
+class DetectionResponse(BaseModel):
+    """检测响应模型"""
+    task_id: str
+    message: str
 
 class CapabilityResultModel(BaseModel):
     """能力检测结果模型"""
@@ -666,6 +691,73 @@ async def get_capabilities():
 
 
 
+@app.post("/api/detect", response_model=DetectionResponse)
+async def start_detection(request: DetectionRequest, background_tasks: BackgroundTasks):
+    """开始能力检测"""
+    
+    # 简单的并发控制
+    active_count = len([task for task, is_active in active_tasks.items() if is_active])
+    if active_count >= MAX_CONCURRENT_TASKS:
+        raise HTTPException(
+            status_code=429, 
+            detail=f"服务器繁忙，请稍后重试 ({active_count}/{MAX_CONCURRENT_TASKS})"
+        )
+    
+    # 生成任务ID
+    task_id = str(uuid.uuid4())
+    
+    # 创建配置
+    try:
+        config = ChannelConfig(
+            provider=request.provider,
+            base_url=request.base_url,
+            api_key=request.api_key,
+            timeout=request.timeout
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    # 初始化进度和时间戳
+    current_time = time.time()
+    task_timestamps[task_id] = current_time
+    active_tasks[task_id] = True
+    
+    detection_progress[task_id] = {
+        "status": "starting",
+        "progress": 0,
+        "current_capability": None,
+        "completed_capabilities": [],
+        "total_capabilities": 0
+    }
+    
+    # 后台执行检测
+    logger.info(f"启动检测任务: {request.provider} - {request.target_model}")
+    background_tasks.add_task(run_detection, task_id, config, request.capabilities, request.target_model)
+    
+    return DetectionResponse(
+        task_id=task_id,
+        message="检测任务已开始"
+    )
+
+
+@app.get("/api/progress/{task_id}")
+async def get_progress(task_id: str):
+    """获取检测进度"""
+    if task_id not in detection_progress:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    
+    return detection_progress[task_id]
+
+
+@app.get("/api/results/{task_id}")
+async def get_results(task_id: str):
+    """获取检测结果"""
+    if task_id not in detection_results:
+        raise HTTPException(status_code=404, detail="结果不存在")
+    
+    return detection_results[task_id]
+
+
 @app.post("/api/fetch_models")
 async def fetch_models(request: dict):
     """获取模型列表"""
@@ -689,15 +781,61 @@ async def fetch_models(request: dict):
         detector = CapabilityDetectorFactory.create(config)
         
         # 获取模型列表
+        logger.info(f"正在获取 {provider} 的模型列表...")
         models = await detector.detect_models()
+        logger.info(f"成功获取 {len(models)} 个模型")
         
         return {"models": models}
         
     except Exception as e:
-        logger.error(f"Failed to fetch models: {e}")
+        logger.error(f"模型获取失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
+async def run_detection(task_id: str, config: ChannelConfig, selected_capabilities: Optional[List[str]], target_model: str):
+    """运行能力检测"""
+    try:
+        # 更新进度
+        detection_progress[task_id]["status"] = "running"
+        
+        # 创建检测器
+        detector = CapabilityDetectorFactory.create(config)
+        
+        # 设置目标模型（现在是必填的）
+        detector.target_model = target_model
+        
+        # 设置进度回调
+        async def progress_callback(progress_data):
+            """更新检测进度"""
+            if task_id in detection_progress:
+                detection_progress[task_id].update(progress_data)
+        
+        detector.progress_callback = progress_callback
+        
+        # 执行检测
+        if selected_capabilities:
+            results = await detector.detect_selected_capabilities(selected_capabilities)
+        else:
+            results = await detector.detect_all_capabilities()
+        
+        # 保存结果
+        detection_results[task_id] = results.to_dict()
+        
+        # 更新进度
+        if task_id in detection_progress:
+            detection_progress[task_id]["status"] = "completed"
+            detection_progress[task_id]["progress"] = 100
+        
+        logger.info(f"检测任务完成: {task_id}")
+        
+    except Exception as e:
+        logger.error(f"检测任务失败: {e}")
+        if task_id in detection_progress:
+            detection_progress[task_id]["status"] = "error"
+            detection_progress[task_id]["error"] = str(e)
+    finally:
+        # 标记任务为非活跃状态
+        active_tasks[task_id] = False
 
 
 if __name__ == "__main__":

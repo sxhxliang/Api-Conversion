@@ -184,8 +184,222 @@ class APIConverter {
     }
 
     async startDetection() {
-        // 检测逻辑
-        console.log('Starting detection...');
+        const form = document.getElementById('detectionForm');
+        const formData = new FormData(form);
+
+        // 获取选中的能力
+        const capabilities = Array.from(document.querySelectorAll('input[name="capabilities"]:checked'))
+            .map(cb => cb.value);
+
+        const requestData = {
+            provider: formData.get('provider'),
+            base_url: formData.get('base_url'),
+            api_key: formData.get('api_key'),
+            timeout: parseInt(formData.get('timeout')),
+            target_model: formData.get('target_model') || formData.get('target_model_select'),
+            capabilities: capabilities.length > 0 ? capabilities : null
+        };
+
+        try {
+            const response = await fetch('/api/detect', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                this.currentTaskId = result.task_id;
+                this.showProgress();
+                this.startProgressPolling();
+            } else {
+                this.showError('检测启动失败: ' + (result.detail || '未知错误'));
+            }
+        } catch (error) {
+            this.showError('请求失败: ' + error.message);
+        }
+    }
+
+    showProgress() {
+        document.getElementById('progress').style.display = 'block';
+        document.getElementById('results').style.display = 'none';
+
+        // 重置进度条
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+        progressFill.style.width = '0%';
+        progressText.textContent = '准备中...';
+    }
+
+    startProgressPolling() {
+        this.progressInterval = setInterval(() => {
+            this.checkProgress();
+        }, 1000);
+    }
+
+    stopProgressPolling() {
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
+        }
+    }
+
+    async checkProgress() {
+        if (!this.currentTaskId) return;
+
+        try {
+            const response = await fetch(`/api/progress/${this.currentTaskId}`);
+            const progress = await response.json();
+
+            this.updateProgress(progress);
+
+            if (progress.status === 'completed') {
+                this.stopProgressPolling();
+                await this.loadResults();
+            } else if (progress.status === 'error') {
+                this.stopProgressPolling();
+                this.showError('检测过程中发生错误: ' + (progress.error || '未知错误'));
+            }
+        } catch (error) {
+            console.error('获取进度失败:', error);
+        }
+    }
+
+    updateProgress(progress) {
+        const progressFill = document.getElementById('progress-fill');
+        const progressText = document.getElementById('progress-text');
+
+        progressFill.style.width = progress.progress + '%';
+
+        if (progress.status === 'starting') {
+            progressText.textContent = '正在启动检测...';
+        } else if (progress.status === 'running') {
+            if (progress.current_capability) {
+                progressText.textContent = `正在检测: ${progress.current_capability}`;
+            } else {
+                progressText.textContent = '检测中...';
+            }
+        } else if (progress.status === 'waiting') {
+            progressText.textContent = `⏱️ ${progress.current_capability || '等待中...'}`;
+        } else if (progress.status === 'completed') {
+            progressText.textContent = '检测完成！';
+        }
+    }
+
+    async loadResults() {
+        if (!this.currentTaskId) return;
+
+        try {
+            const response = await fetch(`/api/results/${this.currentTaskId}`);
+            const results = await response.json();
+
+            this.displayResults(results);
+            
+            // 清除任务ID，防止重复请求
+            this.currentTaskId = null;
+        } catch (error) {
+            console.error('加载结果失败:', error);
+            this.showError('加载结果失败: ' + error.message);
+        }
+    }
+
+    displayResults(results) {
+        const resultsSection = document.getElementById('results');
+        const resultsContent = document.getElementById('results-content');
+
+        // 计算统计信息
+        const totalCapabilities = Object.keys(results.capabilities).length;
+        const supportedCapabilities = Object.values(results.capabilities)
+            .filter(cap => cap.status === 'supported').length;
+
+        // 生成结果HTML
+        resultsContent.innerHTML = `
+            <div class="results-summary fade-in">
+                <div class="summary-card">
+                    <h3>支持的能力</h3>
+                    <div class="value">${supportedCapabilities}/${totalCapabilities}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>检测提供商</h3>
+                    <div class="value">${results.provider.toUpperCase()}</div>
+                </div>
+                <div class="summary-card">
+                    <h3>检测状态</h3>
+                    <div class="value">✅ 完成</div>
+                </div>
+            </div>
+
+            <div class="capabilities-results fade-in">
+                <h3>能力检测详情</h3>
+                <table class="capabilities-table">
+                    <thead>
+                        <tr>
+                            <th>能力</th>
+                            <th>状态</th>
+                            <th>响应时间</th>
+                            <th>详情</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${this.generateCapabilityRows(results.capabilities)}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="detection-info fade-in">
+                <p><strong>检测时间:</strong> ${new Date(results.detection_time).toLocaleString()}</p>
+                <p><strong>模型:</strong> ${results.models.join(', ')}</p>
+                <p><strong>API基础URL:</strong> ${results.base_url}</p>
+            </div>
+        `;
+
+        // 隐藏进度条，显示结果
+        document.getElementById('progress').style.display = 'none';
+        resultsSection.style.display = 'block';
+
+        // 添加淡入动画
+        setTimeout(() => {
+            resultsSection.classList.add('fade-in');
+        }, 100);
+    }
+
+    generateCapabilityRows(capabilities) {
+        return Object.entries(capabilities).map(([capabilityId, result]) => {
+            const statusClass = result.status === 'supported' ? 'status-supported' : 'status-not-supported';
+            const statusText = result.status === 'supported' ? '✅ 支持' : '❌ 不支持';
+            const responseTime = result.response_time ? `${result.response_time.toFixed(2)}ms` : 'N/A';
+
+            return `
+                <tr>
+                    <td>${capabilityId}</td>
+                    <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                    <td>${responseTime}</td>
+                    <td>
+                        ${result.error ? `<span class="error-text">${result.error}</span>` : ''}
+                        ${result.details ? `<pre class="details-text">${JSON.stringify(result.details, null, 2)}</pre>` : ''}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    showError(message) {
+        // 创建错误提示
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'error-message fade-in';
+        errorDiv.textContent = message;
+
+        // 插入到页面顶部
+        const container = document.querySelector('.container');
+        container.insertBefore(errorDiv, container.firstChild);
+
+        // 3秒后自动消失
+        setTimeout(() => {
+            errorDiv.remove();
+        }, 3000);
     }
 
     setupModernAnimations() {

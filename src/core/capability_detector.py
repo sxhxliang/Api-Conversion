@@ -69,6 +69,7 @@ class BaseCapabilityDetector(ABC):
         self.console = Console()
         self.target_model = None  # 指定要检测的模型
         self.debug_mode = False  # 调试模式
+        self.progress_callback = None  # 进度回调函数
     
     @abstractmethod
     async def detect_models(self) -> List[str]:
@@ -101,16 +102,38 @@ class BaseCapabilityDetector(ABC):
         # 检测能力
         capabilities = {}
         capability_configs = self.config_manager.get_all_capabilities()
+        total_capabilities = len(capability_configs)
+        
+        # 初始化进度
+        if self.progress_callback:
+            await self.progress_callback({
+                "status": "running",
+                "progress": 0,
+                "current_capability": None,
+                "completed_capabilities": [],
+                "total_capabilities": total_capabilities
+            })
         
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=self.console
         ) as progress:
-            task = progress.add_task("检测能力中...", total=len(capability_configs))
+            task = progress.add_task("检测能力中...", total=total_capabilities)
+            completed_count = 0
             
             for name, config in capability_configs.items():
                 progress.update(task, description=f"检测 {config.description}")
+                
+                # 更新当前检测的能力
+                if self.progress_callback:
+                    await self.progress_callback({
+                        "status": "running",
+                        "progress": int((completed_count / total_capabilities) * 100),
+                        "current_capability": config.description,
+                        "completed_capabilities": list(capabilities.keys()),
+                        "total_capabilities": total_capabilities
+                    })
                 
                 try:
                     result = await self.test_capability(config)
@@ -124,7 +147,18 @@ class BaseCapabilityDetector(ABC):
                         error=str(e)
                     )
                 
+                completed_count += 1
                 progress.advance(task)
+                
+                # 更新完成进度
+                if self.progress_callback:
+                    await self.progress_callback({
+                        "status": "running",
+                        "progress": int((completed_count / total_capabilities) * 100),
+                        "current_capability": None,
+                        "completed_capabilities": list(capabilities.keys()),
+                        "total_capabilities": total_capabilities
+                    })
         
         return ChannelCapabilities(
             provider=self.config.provider,
@@ -165,16 +199,38 @@ class BaseCapabilityDetector(ABC):
         
         # 检测能力
         capabilities = {}
+        total_capabilities = len(capability_configs)
+        
+        # 初始化进度
+        if self.progress_callback:
+            await self.progress_callback({
+                "status": "running",
+                "progress": 0,
+                "current_capability": None,
+                "completed_capabilities": [],
+                "total_capabilities": total_capabilities
+            })
         
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=self.console
         ) as progress:
-            task = progress.add_task("检测能力中...", total=len(capability_configs))
+            task = progress.add_task("检测能力中...", total=total_capabilities)
+            completed_count = 0
             
             for name, config in capability_configs.items():
                 progress.update(task, description=f"检测 {config.description}")
+                
+                # 更新当前检测的能力
+                if self.progress_callback:
+                    await self.progress_callback({
+                        "status": "running",
+                        "progress": int((completed_count / total_capabilities) * 100),
+                        "current_capability": config.description,
+                        "completed_capabilities": list(capabilities.keys()),
+                        "total_capabilities": total_capabilities
+                    })
                 
                 try:
                     result = await self.test_capability(config)
@@ -188,7 +244,18 @@ class BaseCapabilityDetector(ABC):
                         error=str(e)
                     )
                 
+                completed_count += 1
                 progress.advance(task)
+                
+                # 更新完成进度
+                if self.progress_callback:
+                    await self.progress_callback({
+                        "status": "running",
+                        "progress": int((completed_count / total_capabilities) * 100),
+                        "current_capability": None,
+                        "completed_capabilities": list(capabilities.keys()),
+                        "total_capabilities": total_capabilities
+                    })
         
         return ChannelCapabilities(
             provider=self.config.provider,
