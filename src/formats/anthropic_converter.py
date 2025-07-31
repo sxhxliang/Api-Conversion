@@ -126,6 +126,7 @@ class AnthropicConverter(BaseConverter):
         """转换Anthropic请求到目标格式"""
         try:
             if target_format == "anthropic":
+                # Anthropic到Anthropic，格式与渠道相同，不需要转换思考参数
                 return ConversionResult(success=True, data=data)
             elif target_format == "openai":
                 return self._convert_to_openai_request(data)

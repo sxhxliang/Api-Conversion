@@ -40,6 +40,7 @@ class OpenAIConverter(BaseConverter):
         """转换OpenAI请求到目标格式"""
         try:
             if target_format == "openai":
+                # OpenAI到OpenAI，格式与渠道相同，不需要转换思考参数
                 return ConversionResult(success=True, data=data)
             elif target_format == "anthropic":
                 return self._convert_to_anthropic_request(data)
@@ -203,10 +204,17 @@ class OpenAIConverter(BaseConverter):
                     })
             result_data["tools"] = anthropic_tools
         
-        # 处理思考预算转换 (OpenAI reasoning_effort -> Anthropic thinkingBudget)
-        if "reasoning_effort" in data:
-            reasoning_effort = data["reasoning_effort"]
-            self.logger.info(f"🧠 [THINKING BUDGET] 检测到OpenAI reasoning_effort参数: '{reasoning_effort}'")
+        # 处理思考预算转换 (OpenAI max_completion_tokens + reasoning_effort -> Anthropic thinkingBudget)
+        # 通过max_completion_tokens判断是否为思考模式
+        if "max_completion_tokens" in data:
+            self.logger.info(f"🧠 [THINKING BUDGET] 检测到OpenAI max_completion_tokens参数，启用思考模式")
+            
+            # 确定reasoning_effort：如果没传则默认为medium
+            reasoning_effort = data.get("reasoning_effort", "medium")
+            if "reasoning_effort" not in data:
+                self.logger.info(f"🧠 [THINKING BUDGET] 未指定reasoning_effort，默认设为: '{reasoning_effort}'")
+            else:
+                self.logger.info(f"🧠 [THINKING BUDGET] 使用指定的reasoning_effort参数: '{reasoning_effort}'")
             
             # 根据环境变量映射reasoning_effort到具体的token数值
             import os
@@ -411,10 +419,17 @@ class OpenAIConverter(BaseConverter):
                 generation_config["response_schema"] = data["response_format"]["json_schema"].get("schema", {})
             result_data["generationConfig"] = generation_config
         
-        # 处理思考预算转换 (OpenAI reasoning_effort -> Gemini thinkingBudget)
-        if "reasoning_effort" in data:
-            reasoning_effort = data["reasoning_effort"]
-            self.logger.info(f"🧠 [THINKING BUDGET] 检测到OpenAI reasoning_effort参数: '{reasoning_effort}'")
+        # 处理思考预算转换 (OpenAI max_completion_tokens + reasoning_effort -> Gemini thinkingBudget)
+        # 通过max_completion_tokens判断是否为思考模式
+        if "max_completion_tokens" in data:
+            self.logger.info(f"🧠 [THINKING BUDGET] 检测到OpenAI max_completion_tokens参数，启用思考模式")
+            
+            # 确定reasoning_effort：如果没传则默认为medium
+            reasoning_effort = data.get("reasoning_effort", "medium")
+            if "reasoning_effort" not in data:
+                self.logger.info(f"🧠 [THINKING BUDGET] 未指定reasoning_effort，默认设为: '{reasoning_effort}'")
+            else:
+                self.logger.info(f"🧠 [THINKING BUDGET] 使用指定的reasoning_effort参数: '{reasoning_effort}'")
             
             # 根据环境变量映射reasoning_effort到具体的token数值
             import os

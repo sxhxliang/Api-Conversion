@@ -90,6 +90,7 @@ class GeminiConverter(BaseConverter):
         """转换Gemini请求到目标格式"""
         try:
             if target_format == "gemini":
+                # Gemini到Gemini，格式与渠道相同，不需要转换思考参数
                 return ConversionResult(success=True, data=data)
             elif target_format == "openai":
                 return self._convert_to_openai_request(data)
