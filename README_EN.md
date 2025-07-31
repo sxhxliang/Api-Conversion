@@ -140,7 +140,16 @@ Copy `.env.example` to `.env` and modify configurations as needed:
 - `GEMINI_TO_OPENAI_HIGH_REASONING_THRESHOLD` - Threshold for judging Gemini tokens as high (default: 16384)
 
 ### Database Configuration (Optional)
+- `DATABASE_TYPE` - Database type (sqlite or mysql, default: sqlite)
 - `DATABASE_PATH` - SQLite database file path (default: data/channels.db)
+
+#### MySQL Database Configuration (Used when DATABASE_TYPE=mysql)
+- `MYSQL_HOST` - MySQL server address
+- `MYSQL_PORT` - MySQL port number (default: 3306)
+- `MYSQL_USER` - MySQL username
+- `MYSQL_PASSWORD` - MySQL password
+- `MYSQL_DATABASE` - MySQL database name
+- `MYSQL_SOCKET` - MySQL socket file path (optional, used for local connections)
 
 ### Logging Configuration (Optional)
 - `LOG_LEVEL` - Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL, default: WARNING)

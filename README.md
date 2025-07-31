@@ -140,7 +140,16 @@ python web_server.py
 - `GEMINI_TO_OPENAI_HIGH_REASONING_THRESHOLD` - Gemini token数判断为high的阈值（默认：16384）
 
 ### 数据库配置（可选）
+- `DATABASE_TYPE` - 数据库类型（sqlite 或 mysql，默认：sqlite）
 - `DATABASE_PATH` - SQLite数据库文件路径（默认：data/channels.db）
+
+#### MySQL数据库配置（当DATABASE_TYPE=mysql时使用）
+- `MYSQL_HOST` - MySQL服务器地址
+- `MYSQL_PORT` - MySQL端口号（默认：3306）
+- `MYSQL_USER` - MySQL用户名
+- `MYSQL_PASSWORD` - MySQL密码
+- `MYSQL_DATABASE` - MySQL数据库名
+- `MYSQL_SOCKET` - MySQL socket文件路径（可选，本地连接时使用）
 
 ### 日志配置（可选）
 - `LOG_LEVEL` - 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL，默认：WARNING）
