@@ -271,44 +271,24 @@ def convert_models_to_anthropic_format(raw_models: List[Dict[str, Any]], source_
 
 
 def convert_models_to_gemini_format(raw_models: List[Dict[str, Any]], source_provider: str) -> List[Dict[str, Any]]:
-    """将原始模型数据转换为Gemini格式"""
+    """将原始模型数据转换为Gemini格式（极简版，只包含name字段）"""
     models = []
     
     for model in raw_models:
         if source_provider == "gemini":
-            # Gemini格式直接返回
-            models.append(model)
+            # Gemini格式，只保留name
+            models.append({
+                "name": model.get("name", f"models/{model.get('id', '')}")
+            })
         elif source_provider == "openai":
             # OpenAI格式转换
             models.append({
-                "name": f"models/{model.get('id', '')}",
-                "baseModelId": "",
-                "version": "001",
-                "displayName": model.get("id", ""),
-                "description": f"Model from {model.get('owned_by', 'unknown')}",  
-                "inputTokenLimit": 30720,
-                "outputTokenLimit": 8192,
-                "supportedGenerationMethods": ["generateContent", "countTokens"],
-                "temperature": 1.0,
-                "maxTemperature": 2.0,
-                "topP": 0.95,
-                "topK": 64
+                "name": f"models/{model.get('id', '')}"
             })
         elif source_provider == "anthropic":
             # Anthropic格式转换
             models.append({
-                "name": f"models/{model.get('id', '')}",
-                "baseModelId": "",
-                "version": "001", 
-                "displayName": model.get("display_name", model.get("id", "")),
-                "description": f"Anthropic model: {model.get('id', '')}",
-                "inputTokenLimit": 200000,
-                "outputTokenLimit": 8192,
-                "supportedGenerationMethods": ["generateContent", "countTokens"],
-                "temperature": 1.0,
-                "maxTemperature": 1.0,
-                "topP": 0.95,
-                "topK": 40
+                "name": f"models/{model.get('id', '')}"
             })
     
     return models
