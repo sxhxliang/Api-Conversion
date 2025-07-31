@@ -21,83 +21,66 @@ class APIKeyEncryption:
     
     def __init__(self):
         self._fernet = None
+        # 获取数据库类型
+        from src.utils.env_config import env_config
+        self.db_type = env_config.database_type
         self._init_encryption_key()
     
     def _init_encryption_key(self):
         """初始化加密密钥"""
-        # 尝试从环境变量获取加密密钥
+        # 1. 优先使用环境变量中的密钥
         encryption_key = os.getenv('ENCRYPTION_KEY')
+        if encryption_key:
+            logger.info("Using ENCRYPTION_KEY from environment variables")
+        else:
+            # 2. 尝试从数据库获取或生成新密钥
+            encryption_key = self._get_or_create_encryption_key()
         
-        if not encryption_key:
-            # 首先尝试从数据库获取已存储的密钥
-            encryption_key = self._get_stored_encryption_key()
-            
-            if not encryption_key:
-                # 检查数据库中是否已存在加密数据
-                has_encrypted_data = self._check_existing_encrypted_data()
-                
-                if has_encrypted_data:
-                    logger.error("Found encrypted API keys in database but no ENCRYPTION_KEY available!")
-                    logger.error("Option 1: Set ENCRYPTION_KEY in your .env file if you have the key")
-                    logger.error("Option 2: Delete encrypted channels and restart to generate new key")
-                    raise ValueError("Missing ENCRYPTION_KEY - cannot decrypt existing encrypted data")
-                else:
-                    # 没有加密数据，生成新密钥并自动保存到数据库配置
-                    encryption_key = self._generate_encryption_key()
-                    self._store_encryption_key(encryption_key)
-                    logger.info("Generated new encryption key and stored in database")
-                    logger.info("For better security, consider moving this to .env file:")
-                    logger.info(f"ENCRYPTION_KEY={encryption_key}")
-            else:
-                logger.info("Using stored encryption key from database")
-        
+        # 3. 验证密钥格式
         try:
-            # 验证密钥格式
             self._fernet = Fernet(encryption_key.encode())
             logger.info("Encryption system initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize encryption: {e}")
             raise ValueError("Invalid encryption key format")
     
-    def _check_existing_encrypted_data(self) -> bool:
-        """检查数据库中是否存在加密数据（避免循环导入）"""
+    def _get_or_create_encryption_key(self) -> str:
+        """从数据库获取密钥，如果不存在则创建新密钥"""
         try:
-            from src.utils.env_config import env_config
-            import sqlite3
-            
-            db_path = env_config.database_path
-            if not os.path.exists(db_path):
-                return False
-                
-            conn = sqlite3.connect(db_path)
-            cursor = conn.execute(
-                "SELECT COUNT(*) FROM channels WHERE api_key LIKE 'encrypted:%'"
-            )
-            count = cursor.fetchone()[0]
-            conn.close()
-            return count > 0
-        except Exception:
-            # 如果查询失败（表不存在等），假设没有加密数据
-            return False
+            # 尝试一次性完成所有数据库操作
+            return self._database_key_operations()
+        except Exception as db_error:
+            logger.warning(f"Database operations failed: {db_error}")
+            # 数据库操作失败时，生成内存密钥
+            encryption_key = self._generate_encryption_key()
+            logger.info("Generated new encryption key (using in-memory only)")
+            logger.info("For better security, consider moving this to .env file:")
+            logger.info(f"ENCRYPTION_KEY={encryption_key}")
+            return encryption_key
     
-    def _generate_encryption_key(self) -> str:
-        """生成新的加密密钥"""
-        # 生成32字节的随机密钥
-        key = Fernet.generate_key()
-        return key.decode()
+    def _database_key_operations(self) -> str:
+        """统一的数据库密钥操作（获取存储的密钥或创建新密钥）"""
+        if self.db_type == "sqlite":
+            return self._sqlite_key_operations()
+        elif self.db_type == "mysql":
+            return self._mysql_key_operations()
+        else:
+            raise ValueError(f"Unsupported database type: {self.db_type}")
     
-    def _store_encryption_key(self, encryption_key: str):
-        """将加密密钥存储到数据库配置中"""
+    def _sqlite_key_operations(self) -> str:
+        """SQLite密钥操作"""
+        import sqlite3
+        db_path = env_config.database_path
+        
+        # 确保数据库目录存在
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        
+        conn = sqlite3.connect(db_path)
         try:
-            from src.utils.env_config import env_config
-            import sqlite3
+            cursor = conn.cursor()
             
-            db_path = env_config.database_path
-            os.makedirs(os.path.dirname(db_path), exist_ok=True)
-            
-            conn = sqlite3.connect(db_path)
             # 创建配置表（如果不存在）
-            conn.execute('''
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS config (
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL,
@@ -106,34 +89,115 @@ class APIKeyEncryption:
                 )
             ''')
             
-            # 存储加密密钥
-            conn.execute(
-                'INSERT OR REPLACE INTO config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
-                ('encryption_key', encryption_key)
-            )
-            conn.commit()
-            conn.close()
-        except Exception as e:
-            logger.warning(f"Failed to store encryption key in database: {e}")
-    
-    def _get_stored_encryption_key(self) -> Optional[str]:
-        """从数据库配置中获取加密密钥"""
-        try:
-            from src.utils.env_config import env_config
-            import sqlite3
+            # 检查是否已有加密密钥
+            cursor.execute('SELECT value FROM config WHERE key = ?', ('encryption_key',))
+            row = cursor.fetchone()
             
-            db_path = env_config.database_path
-            if not os.path.exists(db_path):
-                return None
+            if row:
+                logger.info("Using stored encryption key from database")
+                return row[0]
+            else:
+                # 检查是否有加密数据
+                cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='channels'")
+                if cursor.fetchone()[0] > 0:
+                    cursor.execute("SELECT COUNT(*) FROM channels WHERE api_key LIKE 'encrypted:%'")
+                    has_encrypted_data = cursor.fetchone()[0] > 0
+                    
+                    if has_encrypted_data:
+                        raise ValueError("Found encrypted API keys but no encryption key stored")
                 
-            conn = sqlite3.connect(db_path)
-            cursor = conn.execute('SELECT value FROM config WHERE key = ?', ('encryption_key',))
-            result = cursor.fetchone()
+                # 生成并存储新密钥
+                encryption_key = self._generate_encryption_key()
+                cursor.execute(
+                    'INSERT INTO config (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+                    ('encryption_key', encryption_key)
+                )
+                conn.commit()
+                logger.info("Generated new encryption key and stored in database")
+                logger.info("For better security, consider moving this to .env file:")
+                logger.info(f"ENCRYPTION_KEY={encryption_key}")
+                return encryption_key
+                
+        finally:
             conn.close()
+    
+    def _mysql_key_operations(self) -> str:
+        """MySQL密钥操作"""
+        import pymysql
+        
+        connect_params = {
+            'host': env_config.mysql_host,
+            'port': env_config.mysql_port,
+            'user': env_config.mysql_user,
+            'password': env_config.mysql_password,
+            'database': env_config.mysql_database,
+            'charset': 'utf8mb4',
+            'connect_timeout': 5,
+            'read_timeout': 10,
+            'write_timeout': 10,
+            'ssl_disabled': False
+        }
+        
+        if env_config.mysql_socket:
+            connect_params['unix_socket'] = env_config.mysql_socket
+            connect_params.pop('host', None)
+            connect_params.pop('port', None)
+        
+        conn = pymysql.connect(**connect_params)
+        try:
+            cursor = conn.cursor(pymysql.cursors.DictCursor)
             
-            return result[0] if result else None
-        except Exception:
-            return None
+            # 创建配置表（如果不存在）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS config (
+                    `key` VARCHAR(255) PRIMARY KEY,
+                    `value` TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ''')
+            
+            # 检查是否已有加密密钥
+            cursor.execute('SELECT `value` FROM config WHERE `key` = %s', ('encryption_key',))
+            row = cursor.fetchone()
+            
+            if row:
+                logger.info("Using stored encryption key from database")
+                return row['value']
+            else:
+                # 检查是否有加密数据
+                cursor.execute("SHOW TABLES LIKE 'channels'")
+                if cursor.fetchone():
+                    cursor.execute("SELECT COUNT(*) as count FROM channels WHERE api_key LIKE %s", ("encrypted:%",))
+                    has_encrypted_data = cursor.fetchone()['count'] > 0
+                    
+                    if has_encrypted_data:
+                        raise ValueError("Found encrypted API keys but no encryption key stored")
+                
+                # 生成并存储新密钥
+                encryption_key = self._generate_encryption_key()
+                cursor.execute('''
+                    INSERT INTO config (`key`, `value`, updated_at) 
+                    VALUES (%s, %s, CURRENT_TIMESTAMP)
+                    ON DUPLICATE KEY UPDATE
+                    `value` = VALUES(`value`),
+                    updated_at = VALUES(updated_at)
+                ''', ('encryption_key', encryption_key))
+                conn.commit()
+                logger.info("Generated new encryption key and stored in database")
+                logger.info("For better security, consider moving this to .env file:")
+                logger.info(f"ENCRYPTION_KEY={encryption_key}")
+                return encryption_key
+                
+        finally:
+            conn.close()
+    
+    def _generate_encryption_key(self) -> str:
+        """生成新的加密密钥"""
+        # 生成32字节的随机密钥
+        key = Fernet.generate_key()
+        return key.decode()
+    
     
     def encrypt_api_key(self, api_key: str) -> str:
         """加密API密钥"""

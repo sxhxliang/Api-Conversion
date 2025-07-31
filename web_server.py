@@ -40,6 +40,18 @@ def main():
             print(f"   - {error}")
         sys.exit(1)
     
+    # 验证数据库连接
+    print("🔧 验证数据库连接...")
+    try:
+        from src.utils.database import db_manager
+        # 触发数据库初始化
+        db_manager._ensure_initialized()
+        print(f"✅ 数据库连接成功 ({env_config.database_type})")
+    except Exception as e:
+        print(f"❌ 数据库连接失败: {e}")
+        print("请检查数据库配置后重试")
+        sys.exit(1)
+    
     print("🚀 启动AI API统一转换代理系统...")
     print(f"📖 访问 http://localhost:{args.port} 查看Web界面")
     print(f"📚 API文档: http://localhost:{args.port}/docs")

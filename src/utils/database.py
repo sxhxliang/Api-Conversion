@@ -1,12 +1,13 @@
 """
-SQLite数据库管理器
-用于存储渠道信息和系统配置
+数据库管理器
+支持SQLite和MySQL数据库，用于存储渠道信息和系统配置
 """
 import sqlite3
+import pymysql
 import os
 import json
 import uuid
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 from contextlib import contextmanager
 
@@ -18,60 +19,191 @@ logger = setup_logger("database")
 
 
 class DatabaseManager:
-    """数据库管理器"""
+    """数据库管理器，支持SQLite和MySQL"""
     
     def __init__(self, db_path: str = None):
+        self.db_type = env_config.database_type
         self.db_path = db_path or env_config.database_path
-        self._ensure_data_dir()
-        self._init_database()
+        self._initialized = False
+        
+        if self.db_type == "sqlite":
+            self._ensure_data_dir()
+        
+        # 立即验证数据库连接，不再使用懒加载
+        self._ensure_initialized()
+    
+    def _ensure_initialized(self):
+        """确保数据库已初始化"""
+        if not self._initialized:
+            try:
+                self._init_database()
+                self._initialized = True
+            except Exception as e:
+                logger.error(f"Database initialization failed: {e}")
+                # 直接抛出异常，不再自动回退到SQLite
+                raise RuntimeError(f"Failed to initialize {self.db_type} database: {e}")
     
     def _ensure_data_dir(self):
-        """确保数据目录存在"""
+        """确保SQLite数据目录存在"""
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        
+    def _get_raw_connection(self):
+        """获取原始数据库连接（不检查初始化状态）"""
+        if self.db_type == "sqlite":
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            return conn
+        elif self.db_type == "mysql":
+            connect_params = {
+                'host': env_config.mysql_host,
+                'port': env_config.mysql_port,
+                'user': env_config.mysql_user,
+                'password': env_config.mysql_password,
+                'database': env_config.mysql_database,
+                'charset': 'utf8mb4',
+                'cursorclass': pymysql.cursors.DictCursor,
+                'autocommit': False,
+                'connect_timeout': 5,   # 减少连接超时时间
+                'read_timeout': 10,    # 减少读取超时时间  
+                'write_timeout': 10,   # 减少写入超时时间
+                'ssl_disabled': False  # Enable SSL for cloud databases
+            }
+            
+            if env_config.mysql_socket:
+                connect_params['unix_socket'] = env_config.mysql_socket
+                connect_params.pop('host', None)
+                connect_params.pop('port', None)
+            
+            return pymysql.connect(**connect_params)
+        else:
+            raise ValueError(f"Unsupported database type: {self.db_type}")
+    
+    def _execute_query(self, conn, query: str, params: tuple = None):
+        """执行查询，自动处理SQLite和MySQL的差异"""
+        cursor = conn.cursor()
+        
+        if self.db_type == "mysql":
+            # 将SQLite的?占位符转换为MySQL的%s占位符
+            query = query.replace('?', '%s')
+        
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+        
+        return cursor
     
     @contextmanager
     def get_connection(self):
         """获取数据库连接的上下文管理器"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row  # 使结果可以通过列名访问
+        self._ensure_initialized()
+        
+        if self.db_type == "sqlite":
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row  # 使结果可以通过列名访问
+        elif self.db_type == "mysql":
+            # MySQL连接参数
+            connect_params = {
+                'host': env_config.mysql_host,
+                'port': env_config.mysql_port,
+                'user': env_config.mysql_user,
+                'password': env_config.mysql_password,
+                'database': env_config.mysql_database,
+                'charset': 'utf8mb4',
+                'cursorclass': pymysql.cursors.DictCursor,  # 使结果可以通过列名访问
+                'autocommit': False,
+                'connect_timeout': 5,   # 5秒连接超时
+                'read_timeout': 10,     # 10秒读取超时
+                'write_timeout': 10,    # 10秒写入超时
+                'ssl_disabled': False   # Enable SSL for cloud databases
+            }
+            
+            # 如果配置了socket路径，则使用socket连接
+            if env_config.mysql_socket:
+                connect_params['unix_socket'] = env_config.mysql_socket
+                # 使用socket时不需要host和port
+                connect_params.pop('host', None)
+                connect_params.pop('port', None)
+            
+            conn = pymysql.connect(**connect_params)
+        else:
+            raise ValueError(f"Unsupported database type: {self.db_type}")
+        
         try:
             yield conn
+        except Exception as e:
+            if hasattr(conn, 'rollback'):
+                conn.rollback()
+            raise e
         finally:
             conn.close()
     
     def _init_database(self):
         """初始化数据库表"""
-        with self.get_connection() as conn:
-            # 创建渠道表
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS channels (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    base_url TEXT NOT NULL,
-                    api_key TEXT NOT NULL,
-                    custom_key TEXT UNIQUE NOT NULL,
-                    timeout INTEGER DEFAULT 30,
-                    max_retries INTEGER DEFAULT 3,
-                    enabled BOOLEAN DEFAULT 1,
-                    models_mapping TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-            ''')
+        conn = self._get_raw_connection()
+        try:
+            cursor = conn.cursor()
             
-            # 创建系统配置表
-            conn.execute('''
-                CREATE TABLE IF NOT EXISTS system_config (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                )
-            ''')
+            if self.db_type == "sqlite":
+                # SQLite表结构
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS channels (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        provider TEXT NOT NULL,
+                        base_url TEXT NOT NULL,
+                        api_key TEXT NOT NULL,
+                        custom_key TEXT UNIQUE NOT NULL,
+                        timeout INTEGER DEFAULT 30,
+                        max_retries INTEGER DEFAULT 3,
+                        enabled BOOLEAN DEFAULT 1,
+                        models_mapping TEXT,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS system_config (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    )
+                ''')
+                
+            elif self.db_type == "mysql":
+                # MySQL表结构
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS channels (
+                        id VARCHAR(255) PRIMARY KEY,
+                        name VARCHAR(255) NOT NULL,
+                        provider VARCHAR(100) NOT NULL,
+                        base_url TEXT NOT NULL,
+                        api_key TEXT NOT NULL,
+                        custom_key VARCHAR(255) UNIQUE NOT NULL,
+                        timeout INT DEFAULT 30,
+                        max_retries INT DEFAULT 3,
+                        enabled TINYINT(1) DEFAULT 1,
+                        models_mapping TEXT,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
+                
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS system_config (
+                        `key` VARCHAR(255) PRIMARY KEY,
+                        `value` TEXT NOT NULL,
+                        created_at DATETIME NOT NULL,
+                        updated_at DATETIME NOT NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
             
             conn.commit()
-            logger.info("Database initialized successfully")
+            logger.info(f"Database ({self.db_type}) initialized successfully")
+        finally:
+            conn.close()
     
     def add_channel(
         self,
@@ -100,7 +232,7 @@ class DatabaseManager:
         
         with self.get_connection() as conn:
             try:
-                conn.execute('''
+                cursor = self._execute_query(conn, '''
                     INSERT INTO channels 
                     (id, name, provider, base_url, api_key, custom_key, timeout, max_retries, 
                      enabled, models_mapping, created_at, updated_at)
@@ -109,10 +241,11 @@ class DatabaseManager:
                     channel_id, name, provider, base_url, encrypted_api_key, custom_key,
                     timeout, max_retries, True, models_mapping_json, now, now
                 ))
+                
                 conn.commit()
                 logger.info(f"Added new channel: {name} ({provider}) with ID: {channel_id}")
                 return channel_id
-            except sqlite3.IntegrityError as e:
+            except (sqlite3.IntegrityError, pymysql.IntegrityError) as e:
                 if "custom_key" in str(e):
                     raise ValueError(f"Custom key '{custom_key}' already exists")
                 raise ValueError(f"Database integrity error: {e}")
@@ -174,11 +307,11 @@ class DatabaseManager:
         
         with self.get_connection() as conn:
             try:
-                cursor = conn.execute(f'''
+                cursor = self._execute_query(conn, f'''
                     UPDATE channels 
                     SET {", ".join(updates)}
                     WHERE id = ?
-                ''', params)
+                ''', tuple(params))
                 
                 if cursor.rowcount == 0:
                     return False
@@ -186,7 +319,7 @@ class DatabaseManager:
                 conn.commit()
                 logger.info(f"Updated channel: {channel_id}")
                 return True
-            except sqlite3.IntegrityError as e:
+            except (sqlite3.IntegrityError, pymysql.IntegrityError) as e:
                 if "custom_key" in str(e):
                     raise ValueError(f"Custom key '{custom_key}' already exists")
                 raise ValueError(f"Database integrity error: {e}")
@@ -194,7 +327,7 @@ class DatabaseManager:
     def delete_channel(self, channel_id: str) -> bool:
         """删除渠道"""
         with self.get_connection() as conn:
-            cursor = conn.execute("DELETE FROM channels WHERE id = ?", (channel_id,))
+            cursor = self._execute_query(conn, "DELETE FROM channels WHERE id = ?", (channel_id,))
             if cursor.rowcount == 0:
                 return False
             
@@ -205,7 +338,7 @@ class DatabaseManager:
     def get_channel(self, channel_id: str) -> Optional[Dict[str, Any]]:
         """获取渠道信息"""
         with self.get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM channels WHERE id = ?", (channel_id,))
+            cursor = self._execute_query(conn, "SELECT * FROM channels WHERE id = ?", (channel_id,))
             row = cursor.fetchone()
             
             if row:
@@ -221,7 +354,7 @@ class DatabaseManager:
     def get_channel_by_custom_key(self, custom_key: str) -> Optional[Dict[str, Any]]:
         """根据自定义key获取渠道信息"""
         with self.get_connection() as conn:
-            cursor = conn.execute(
+            cursor = self._execute_query(conn, 
                 "SELECT * FROM channels WHERE custom_key = ? AND enabled = 1", 
                 (custom_key,)
             )
@@ -240,7 +373,7 @@ class DatabaseManager:
     def get_all_channels(self) -> List[Dict[str, Any]]:
         """获取所有渠道"""
         with self.get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM channels ORDER BY created_at DESC")
+            cursor = self._execute_query(conn, "SELECT * FROM channels ORDER BY created_at DESC")
             channels = []
             for row in cursor.fetchall():
                 channel = dict(row)
@@ -255,7 +388,7 @@ class DatabaseManager:
     def get_enabled_channels(self) -> List[Dict[str, Any]]:
         """获取所有启用的渠道"""
         with self.get_connection() as conn:
-            cursor = conn.execute("SELECT * FROM channels WHERE enabled = 1 ORDER BY created_at DESC")
+            cursor = self._execute_query(conn, "SELECT * FROM channels WHERE enabled = 1 ORDER BY created_at DESC")
             channels = []
             for row in cursor.fetchall():
                 channel = dict(row)
@@ -270,7 +403,7 @@ class DatabaseManager:
     def get_channels_by_provider(self, provider: str) -> List[Dict[str, Any]]:
         """按提供商获取渠道列表"""
         with self.get_connection() as conn:
-            cursor = conn.execute(
+            cursor = self._execute_query(conn,
                 "SELECT * FROM channels WHERE provider = ? AND enabled = 1 ORDER BY created_at DESC", 
                 (provider,)
             )
@@ -290,35 +423,56 @@ class DatabaseManager:
         now = datetime.now().isoformat()
         
         with self.get_connection() as conn:
-            conn.execute('''
-                INSERT OR REPLACE INTO system_config (key, value, created_at, updated_at)
-                VALUES (?, ?, 
-                    COALESCE((SELECT created_at FROM system_config WHERE key = ?), ?),
-                    ?)
-            ''', (key, value, key, now, now))
+            if self.db_type == "sqlite":
+                cursor = self._execute_query(conn, '''
+                    INSERT OR REPLACE INTO system_config (key, value, created_at, updated_at)
+                    VALUES (?, ?, 
+                        COALESCE((SELECT created_at FROM system_config WHERE key = ?), ?),
+                        ?)
+                ''', (key, value, key, now, now))
+            elif self.db_type == "mysql":
+                cursor = self._execute_query(conn, '''
+                    INSERT INTO system_config (`key`, `value`, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                    `value` = VALUES(`value`),
+                    updated_at = VALUES(updated_at)
+                ''', (key, value, now, now))
             conn.commit()
     
     def get_config(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """获取系统配置"""
         with self.get_connection() as conn:
-            cursor = conn.execute("SELECT value FROM system_config WHERE key = ?", (key,))
+            if self.db_type == "sqlite":
+                cursor = self._execute_query(conn, "SELECT value FROM system_config WHERE key = ?", (key,))
+            elif self.db_type == "mysql":
+                cursor = self._execute_query(conn, "SELECT `value` FROM system_config WHERE `key` = ?", (key,))
             row = cursor.fetchone()
             return row['value'] if row else default
     
     def delete_config(self, key: str) -> bool:
         """删除系统配置"""
         with self.get_connection() as conn:
-            cursor = conn.execute("DELETE FROM system_config WHERE key = ?", (key,))
+            if self.db_type == "sqlite":
+                cursor = self._execute_query(conn, "DELETE FROM system_config WHERE key = ?", (key,))
+            elif self.db_type == "mysql":
+                cursor = self._execute_query(conn, "DELETE FROM system_config WHERE `key` = ?", (key,))
             conn.commit()
             return cursor.rowcount > 0
     
     def get_configs_by_prefix(self, prefix: str) -> List[Dict[str, str]]:
         """获取指定前缀的所有配置"""
         with self.get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT key, value FROM system_config WHERE key LIKE ?", 
-                (f"{prefix}%",)
-            )
+            if self.db_type == "sqlite":
+                cursor = self._execute_query(conn,
+                    "SELECT key, value FROM system_config WHERE key LIKE ?", 
+                    (f"{prefix}%",)
+                )
+            elif self.db_type == "mysql":
+                cursor = self._execute_query(conn,
+                    "SELECT `key`, `value` FROM system_config WHERE `key` LIKE ?", 
+                    (f"{prefix}%",)
+                )
             results = cursor.fetchall()
             return [{"key": row["key"], "value": row["value"]} for row in results]
     
@@ -326,8 +480,9 @@ class DatabaseManager:
         """检查数据库中是否存在加密的API密钥"""
         try:
             with self.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT COUNT(*) as count FROM channels WHERE api_key LIKE 'encrypted:%'"
+                cursor = self._execute_query(conn,
+                    "SELECT COUNT(*) as count FROM channels WHERE api_key LIKE ?"
+                    , ("encrypted:%",)
                 )
                 row = cursor.fetchone()
                 return row['count'] > 0 if row else False
@@ -338,5 +493,19 @@ class DatabaseManager:
 
 
 
-# 全局数据库管理器实例
-db_manager = DatabaseManager()
+# 全局数据库管理器实例（懒加载）
+_db_manager = None
+
+def get_db_manager() -> DatabaseManager:
+    """获取数据库管理器实例"""
+    global _db_manager
+    if _db_manager is None:
+        _db_manager = DatabaseManager()
+    return _db_manager
+
+# 向后兼容的属性访问
+class _DBManagerProxy:
+    def __getattr__(self, name):
+        return getattr(get_db_manager(), name)
+
+db_manager = _DBManagerProxy()

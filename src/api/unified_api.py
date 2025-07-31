@@ -49,9 +49,6 @@ async def fetch_models_from_channel_for_format(channel: ChannelInfo, target_form
         return []
 
 
-async def fetch_models_from_channel(channel: ChannelInfo) -> List[Dict[str, Any]]:
-    """从目标渠道获取真实的模型列表并转换为OpenAI格式（向后兼容）"""
-    return await fetch_models_from_channel_for_format(channel, "openai")
 
 
 async def fetch_raw_models_from_channel(channel: ChannelInfo) -> List[Dict[str, Any]]:
@@ -112,12 +109,6 @@ async def fetch_openai_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
         return models
 
 
-# 向后兼容的函数
-async def fetch_openai_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
-    """获取OpenAI模型列表（向后兼容）"""
-    return await fetch_openai_raw_models(channel)
-
-
 async def fetch_anthropic_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
     """获取Anthropic原始模型数据"""
     logger.info(f"Calling Anthropic models API: {channel.base_url}")
@@ -147,13 +138,6 @@ async def fetch_anthropic_raw_models(channel: ChannelInfo) -> List[Dict[str, Any
         return models
 
 
-# 向后兼容的函数
-async def fetch_anthropic_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
-    """获取Anthropic模型列表并转换为OpenAI格式（向后兼容）"""
-    raw_models = await fetch_anthropic_raw_models(channel)
-    return convert_models_to_openai_format(raw_models, "anthropic")
-
-
 async def fetch_gemini_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
     """获取Gemini原始模型数据"""
     logger.info(f"Calling Gemini models API: {channel.base_url}")
@@ -177,13 +161,6 @@ async def fetch_gemini_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
         
         logger.info(f"Retrieved {len(models)} models from Gemini API")
         return models
-
-
-# 向后兼容的函数
-async def fetch_gemini_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
-    """获取Gemini模型列表并转换为OpenAI格式（向后兼容）"""
-    raw_models = await fetch_gemini_raw_models(channel)
-    return convert_models_to_openai_format(raw_models, "gemini")
 
 
 def convert_models_to_openai_format(raw_models: List[Dict[str, Any]], source_provider: str) -> List[Dict[str, Any]]:
@@ -386,7 +363,14 @@ async def forward_request_to_channel(
                 conversion_result = ConversionResult(success=True, data=request_data)
         else:
             logger.info(f"Same format detected, skipping request conversion: {source_format} -> {channel.provider}")
-            conversion_result = ConversionResult(success=True, data=request_data)
+            # For Gemini passthrough, we need to remove the internal stream field 
+            # because Gemini API doesn't accept it in the request body
+            if channel.provider == "gemini" and request_data.get("stream"):
+                passthrough_data = request_data.copy()
+                passthrough_data.pop("stream")
+                conversion_result = ConversionResult(success=True, data=passthrough_data)
+            else:
+                conversion_result = ConversionResult(success=True, data=request_data)
     else:
         # 转换请求格式
         conversion_result = convert_request(source_format, channel.provider, request_data, headers)
@@ -396,6 +380,8 @@ async def forward_request_to_channel(
     
     # 2. 统一构建目标API的URL和headers（支持所有功能组合）
     target_headers = {"Content-Type": "application/json"}
+    # Always use original request_data for stream detection, since conversion_result.data
+    # may have stream field removed (especially for Gemini passthrough)
     is_streaming = request_data.get("stream", False)
     
     if channel.provider == "openai":
@@ -469,6 +455,7 @@ async def forward_request_to_channel(
 
 async def handle_streaming_response(response, channel, request_data, source_format):
     """处理流式响应"""
+    logger.info(f"STREAMING RESPONSE: channel.provider='{channel.provider}', source_format='{source_format}', status={response.status_code}")
     logger.debug(f"Received streaming response from {channel.provider}: status={response.status_code}")
     
     if response.status_code == 200:
@@ -494,19 +481,14 @@ async def handle_streaming_response(response, channel, request_data, source_form
             logger.info(f"PASSTHROUGH: Response status = {response.status_code}")
             logger.info(f"PASSTHROUGH: Response headers = {dict(response.headers)}")
             
-            # Direct passthrough of complete SSE lines including event: lines
-            # 完全按原样传输，不做任何修改
-            line_count = 0
+            # Direct passthrough using aiter_bytes to preserve exact formatting
+            # 使用字节流传输以保持原始格式不变
             try:
-                async for line in response.aiter_lines():
-                    line_count += 1
-                    if line_count <= 5 or line_count % 10 == 0 or line.strip() == "data: [DONE]":
-                        logger.info(f"PASSTHROUGH Line {line_count}: '{line}'")
-                    
-                    # 完全按原样传输每一行
-                    yield f"{line}\n"
+                async for chunk in response.aiter_bytes():
+                    if chunk:  # 只传输非空chunk
+                        yield chunk.decode('utf-8')
                             
-                logger.info(f"PASSTHROUGH COMPLETED: Total lines processed: {line_count}")
+                logger.info(f"PASSTHROUGH COMPLETED")
             except Exception as e:
                 logger.error(f"PASSTHROUGH ERROR: {e}")
                 raise
@@ -942,10 +924,12 @@ async def unified_gemini_format_endpoint(
     request_data = await request.json()
     request_data["model"] = clean_model_id
     
-    # 对于Gemini格式，如果检测到流式请求，设置stream参数
+    # Gemini流式检测：通过URL路径控制，但需要在请求数据中标记以便后续处理
     if is_streaming:
+        # 为了让handle_unified_request知道这是流式请求，我们需要添加stream标志
+        # 虽然实际发送到Gemini API时不包含这个字段，但内部处理需要
         request_data["stream"] = True
-        logger.debug("Added stream=True to request data for Gemini streaming")
+        logger.debug("Detected Gemini streaming request - added internal stream flag for processing")
     
     # 重新构建请求对象
     class ModifiedRequest:

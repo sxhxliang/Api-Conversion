@@ -91,7 +91,12 @@ class GeminiConverter(BaseConverter):
         try:
             if target_format == "gemini":
                 # Gemini到Gemini，格式与渠道相同，不需要转换思考参数
-                return ConversionResult(success=True, data=data)
+                # 但需要移除内部处理用的stream字段，因为Gemini API不接受此字段
+                cleaned_data = data.copy()
+                if "stream" in cleaned_data:
+                    cleaned_data.pop("stream")
+                    self.logger.debug("Removed internal stream flag for Gemini API")
+                return ConversionResult(success=True, data=cleaned_data)
             elif target_format == "openai":
                 return self._convert_to_openai_request(data)
             elif target_format == "anthropic":

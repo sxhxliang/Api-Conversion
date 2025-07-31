@@ -98,9 +98,45 @@ class EnvConfig:
     # ================================
 
     @property
+    def database_type(self) -> str:
+        """数据库类型 (sqlite|mysql)"""
+        return self.get_str("DATABASE_TYPE", "sqlite").lower()
+
+    @property
     def database_path(self) -> str:
-        """数据库文件路径"""
+        """数据库文件路径（SQLite使用）"""
         return self.get_str("DATABASE_PATH", "data/channels.db")
+
+    @property
+    def mysql_host(self) -> str:
+        """MySQL主机地址"""
+        return self.get_str("MYSQL_HOST", "localhost")
+
+    @property
+    def mysql_port(self) -> int:
+        """MySQL端口"""
+        return self.get_int("MYSQL_PORT", 3306)
+
+    @property
+    def mysql_user(self) -> str:
+        """MySQL用户名"""
+        return self.get_str("MYSQL_USER", "root")
+
+    @property
+    def mysql_password(self) -> str:
+        """MySQL密码"""
+        return self.get_str("MYSQL_PASSWORD", "")
+
+    @property
+    def mysql_database(self) -> str:
+        """MySQL数据库名"""
+        return self.get_str("MYSQL_DATABASE", "default_db")
+
+    @property
+    def mysql_socket(self) -> Optional[str]:
+        """MySQL Socket路径（可选）"""
+        socket_path = self.get_str("MYSQL_SOCKET", "")
+        return socket_path if socket_path else None
 
     # ================================
     # 日志配置
@@ -135,13 +171,27 @@ class EnvConfig:
         if not self.admin_password:
             errors.append("ADMIN_PASSWORD cannot be empty")
 
-        # 验证数据库路径
-        db_dir = Path(self.database_path).parent
-        if not db_dir.exists():
-            try:
-                db_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                errors.append(f"Cannot create database directory {db_dir}: {e}")
+        # 验证数据库配置
+        if self.database_type not in ["sqlite", "mysql"]:
+            errors.append(f"DATABASE_TYPE must be 'sqlite' or 'mysql', got '{self.database_type}'")
+        elif self.database_type == "sqlite":
+            # 验证SQLite数据库路径
+            db_dir = Path(self.database_path).parent
+            if not db_dir.exists():
+                try:
+                    db_dir.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    errors.append(f"Cannot create database directory {db_dir}: {e}")
+        elif self.database_type == "mysql":
+            # 验证MySQL配置
+            if not self.mysql_host:
+                errors.append("MYSQL_HOST cannot be empty when using MySQL")
+            if not self.mysql_user:
+                errors.append("MYSQL_USER cannot be empty when using MySQL")
+            if not self.mysql_database:
+                errors.append("MYSQL_DATABASE cannot be empty when using MySQL")
+            if not (1 <= self.mysql_port <= 65535):
+                errors.append(f"MYSQL_PORT must be between 1 and 65535, got {self.mysql_port}")
 
         # 验证端口范围
         if not (1 <= self.web_port <= 65535):
