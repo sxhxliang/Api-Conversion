@@ -163,16 +163,22 @@ python web_server.py
 #### Mac
 ```bash
 export ANTHROPIC_BASE_URL="https://your_url.com"
-# 测试发现claude code密钥需要以sk-开头
+# 支持两种认证方式（任选其一）：
+# 方式1：API Key认证（需要以sk-开头）
 export ANTHROPIC_API_KEY="sk-xxx"
+# 方式2：Bearer Token认证（使用相同的KEY值）
+export ANTHROPIC_AUTH_TOKEN="sk-xxx"
 claude --model your_model
 ```
 
 #### Windows CMD
 ```cmd
 set ANTHROPIC_BASE_URL=https://your_url.com
-# 测试发现claude code密钥需要以sk-开头
+rem 支持两种认证方式（任选其一）：
+rem 方式1：API Key认证（需要以sk-开头）
 set ANTHROPIC_API_KEY=sk-xxx
+rem 方式2：Bearer Token认证（使用相同的KEY值）
+set ANTHROPIC_AUTH_TOKEN=sk-xxx
 claude --model your_model
 ```
 

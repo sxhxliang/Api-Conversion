@@ -163,16 +163,22 @@ Copy `.env.example` to `.env` and modify configurations as needed:
 #### Mac
 ```bash
 export ANTHROPIC_BASE_URL="https://your_url.com"
-# Testing found that claude code requires keys to start with sk-
+# Supports two authentication methods (choose either one):
+# Method 1: API Key authentication (must start with sk-)
 export ANTHROPIC_API_KEY="sk-xxx"
+# Method 2: Bearer Token authentication (use the same KEY value)
+export ANTHROPIC_AUTH_TOKEN="sk-xxx"
 claude --model your_model
 ```
 
 #### Windows CMD
 ```cmd
 set ANTHROPIC_BASE_URL=https://your_url.com
-# Testing found that claude code requires keys to start with sk-
+rem Supports two authentication methods (choose either one):
+rem Method 1: API Key authentication (must start with sk-)
 set ANTHROPIC_API_KEY=sk-xxx
+rem Method 2: Bearer Token authentication (use the same KEY value)
+set ANTHROPIC_AUTH_TOKEN=sk-xxx
 claude --model your_model
 ```
 
