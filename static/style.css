@@ -2188,6 +2188,99 @@ body::before {
     padding-left: calc(var(--space-md) + 20px);
 }
 
+/* 代理测试结果样式 */
+.test-result {
+    margin-top: 15px;
+    padding: 15px;
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-secondary);
+    transition: all var(--duration-elegance) var(--ease-elegant);
+}
+
+.test-result.success {
+    background: linear-gradient(135deg, #e8f5e8, #f1f8e9);
+    border: 1px solid #c8e6c9;
+}
+
+.test-result.error {
+    background: linear-gradient(135deg, #ffeaea, #ffebee);
+    border: 1px solid #ffcdd2;
+}
+
+.test-result h4 {
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-family: var(--font-heading);
+}
+
+.test-result.success h4 {
+    color: var(--text-success);
+}
+
+.test-result.error h4 {
+    color: var(--text-error);
+}
+
+.test-detail {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--text-secondary);
+    position: relative;
+}
+
+.test-detail.success {
+    border-left: 3px solid var(--text-success);
+    background: rgba(76, 175, 80, 0.05);
+}
+
+.test-detail.error {
+    border-left: 3px solid var(--text-error);
+    background: rgba(244, 67, 54, 0.05);
+}
+
+.spinner {
+    display: inline-block;
+    animation: spin 1s linear infinite;
+    margin-left: 8px;
+    color: var(--color-accent);
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.test-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.test-summary .status-icon {
+    font-size: 1rem;
+}
+
+.test-summary .status-icon.success {
+    color: var(--text-success);
+}
+
+.test-summary .status-icon.error {
+    color: var(--text-error);
+}
+
 @media (prefers-reduced-motion: reduce) {
 
     *,
@@ -2197,4 +2290,134 @@ body::before {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+    
+    .spinner {
+        animation: none !important;
+    }
+}
+
+/* 现代化代理开关样式 */
+.proxy-toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-lg);
+    transition: all var(--duration-elegance) var(--ease-elegant);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.proxy-toggle-container:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 2px 12px rgba(212, 175, 55, 0.1);
+}
+
+.proxy-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    background: #ccc;
+    border-radius: 28px;
+    cursor: pointer;
+    transition: all var(--duration-elegance) var(--ease-elegant);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.proxy-switch:before {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 24px;
+    height: 24px;
+    background: white;
+    border-radius: 50%;
+    transition: all var(--duration-elegance) var(--ease-elegant);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.proxy-switch.active {
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+}
+
+.proxy-switch.active:before {
+    transform: translateX(24px);
+}
+
+.proxy-toggle-label {
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 1rem;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.proxy-toggle-label .icon {
+    font-size: 1.2em;
+    transition: all var(--duration-elegance) var(--ease-elegant);
+}
+
+.proxy-toggle-container.active .proxy-toggle-label .icon {
+    color: var(--color-accent);
+    transform: scale(1.1);
+}
+
+.proxy-toggle-description {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    margin-top: 4px;
+    font-style: italic;
+}
+
+/* 密码字段容器样式 */
+.password-field-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.password-field-container input[type="password"],
+.password-field-container input[type="text"] {
+    width: 100%;
+    padding-right: 45px; /* 为按钮留出空间 */
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    transition: color 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 20px;
+    line-height: 1;
+}
+
+.password-toggle-btn:hover {
+    color: var(--text-secondary);
+}
+
+.password-toggle-btn:active {
+    color: var(--text-primary);
+}
+
+/* 隐藏默认的复选框 */
+.proxy-toggle-container input[type="checkbox"] {
+    display: none;
 }

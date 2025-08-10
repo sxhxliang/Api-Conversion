@@ -15,6 +15,13 @@ class ChannelConfig:
     api_key: str
     timeout: int = 30
     max_retries: int = 3
+    # 代理配置
+    use_proxy: bool = False
+    proxy_type: Optional[str] = None  # http, https, socks5
+    proxy_host: Optional[str] = None
+    proxy_port: Optional[int] = None
+    proxy_username: Optional[str] = None
+    proxy_password: Optional[str] = None
     
     def __post_init__(self):
         # 验证必要参数
@@ -50,7 +57,13 @@ class ConfigManager:
         base_url: str, 
         api_key: str,
         timeout: int = 30,
-        max_retries: int = 3
+        max_retries: int = 3,
+        use_proxy: bool = False,
+        proxy_type: Optional[str] = None,
+        proxy_host: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        proxy_username: Optional[str] = None,
+        proxy_password: Optional[str] = None
     ) -> ChannelConfig:
         """创建渠道配置"""
         return ChannelConfig(
@@ -58,7 +71,13 @@ class ConfigManager:
             base_url=base_url,
             api_key=api_key,
             timeout=timeout,
-            max_retries=max_retries
+            max_retries=max_retries,
+            use_proxy=use_proxy,
+            proxy_type=proxy_type,
+            proxy_host=proxy_host,
+            proxy_port=proxy_port,
+            proxy_username=proxy_username,
+            proxy_password=proxy_password
         )
     
     def _load_default_capabilities(self) -> Dict[str, CapabilityTestConfig]:

@@ -286,8 +286,17 @@ class BaseCapabilityDetector(ABC):
         if show_details or getattr(self, 'debug_mode', False):
             self._show_request_details(method, url, data, default_headers)
         
+        # 配置代理设置
+        proxy_config = None
+        if getattr(self.config, 'use_proxy', False) and self.config.proxy_host and self.config.proxy_port:
+            proxy_url = f"{self.config.proxy_type}://"
+            if self.config.proxy_username and self.config.proxy_password:
+                proxy_url += f"{self.config.proxy_username}:{self.config.proxy_password}@"
+            proxy_url += f"{self.config.proxy_host}:{self.config.proxy_port}"
+            proxy_config = {"http://": proxy_url, "https://": proxy_url}
+        
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, proxies=proxy_config) as client:
                 if method.upper() == "GET":
                     response = await client.get(url, headers=default_headers)
                 elif method.upper() == "POST":

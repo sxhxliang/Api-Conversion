@@ -17,6 +17,7 @@ from formats.base_converter import ConversionResult
 from utils.security import mask_api_key, safe_log_request, safe_log_response
 from src.utils.logger import setup_logger
 from src.utils.exceptions import ChannelNotFoundError, ConversionError, APIError, TimeoutError
+from src.utils.http_client import get_http_client
 
 logger = setup_logger("unified_api")
 
@@ -91,7 +92,7 @@ async def fetch_openai_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
         "Content-Type": "application/json"
     }
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with get_http_client(channel, timeout=30.0) as client:
         response = await client.get(url, headers=headers)
         
         if response.status_code != 200:
@@ -120,7 +121,7 @@ async def fetch_anthropic_raw_models(channel: ChannelInfo) -> List[Dict[str, Any
         "Content-Type": "application/json"
     }
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with get_http_client(channel, timeout=30.0) as client:
         response = await client.get(url, headers=headers)
         
         if response.status_code != 200:
@@ -145,7 +146,7 @@ async def fetch_gemini_raw_models(channel: ChannelInfo) -> List[Dict[str, Any]]:
     url = f"{channel.base_url.rstrip('/')}/models"
     params = {"key": channel.api_key}
     
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with get_http_client(channel, timeout=30.0) as client:
         response = await client.get(url, params=params)
         
         if response.status_code != 200:
@@ -420,11 +421,19 @@ async def forward_request_to_channel(
         logger.debug(f"Sending {'streaming' if is_streaming else 'non-streaming'} request to {channel.provider}: {url}")
         logger.debug(f"Request data: {safe_log_request(conversion_result.data)}")
         
+        # 检查渠道是否配置了代理
+        if getattr(channel, 'use_proxy', False):
+            proxy_host = getattr(channel, 'proxy_host', None)
+            proxy_port = getattr(channel, 'proxy_port', None)
+            logger.info(f"PROXY CHECK: Channel {channel.name} has proxy enabled - {proxy_host}:{proxy_port}")
+        else:
+            logger.info(f"PROXY CHECK: Channel {channel.name} has no proxy configured")
+        
         if is_streaming:
             # 流式请求处理 - 创建独立的生成器函数
             async def stream_generator():
                 try:
-                    async with httpx.AsyncClient(timeout=channel.timeout) as client:
+                    async with get_http_client(channel, timeout=channel.timeout) as client:
                         async with client.stream(
                             "POST",
                             url=url,
@@ -446,7 +455,7 @@ async def forward_request_to_channel(
         else:
             # 统一处理非流式请求：发送转换后的请求到目标渠道
             logger.debug(f"Sending non-streaming request to {channel.provider}: {url}")
-            async with httpx.AsyncClient(timeout=channel.timeout) as client:
+            async with get_http_client(channel, timeout=channel.timeout) as client:
                 response = await client.post(
                     url=url,
                     json=conversion_result.data,
@@ -1117,7 +1126,7 @@ async def handle_gemini_count_tokens(channel: ChannelInfo, model_id: str, reques
     logger.info(f"Final URL with API key: {count_tokens_url}")
     
     # 发送请求到目标渠道
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    async with get_http_client(channel, timeout=30.0) as client:
         response = await client.post(
             count_tokens_url,
             json=request_data,

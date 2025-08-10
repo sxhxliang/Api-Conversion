@@ -425,15 +425,32 @@ class APIConverter {
         // 转换数值类型
         channelData.timeout = parseInt(channelData.timeout);
         channelData.max_retries = parseInt(channelData.max_retries);
+        
+        // 处理代理配置
+        channelData.use_proxy = document.getElementById('use_proxy').checked;
+        if (channelData.use_proxy) {
+            channelData.proxy_type = channelData.proxy_type || 'http';
+            channelData.proxy_port = channelData.proxy_port ? parseInt(channelData.proxy_port) : null;
+            
+            // 如果用户名和密码为空，则不发送
+            if (!channelData.proxy_username) delete channelData.proxy_username;
+            if (!channelData.proxy_password) delete channelData.proxy_password;
+        } else {
+            // 如果不使用代理，删除代理相关字段
+            delete channelData.proxy_type;
+            delete channelData.proxy_host;
+            delete channelData.proxy_port;
+            delete channelData.proxy_username;
+            delete channelData.proxy_password;
+        }
 
         try {
-            const sessionToken = localStorage.getItem('session_token');
             const response = await fetch('/api/channels', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${sessionToken}`
+                    'Content-Type': 'application/json'
                 },
+                credentials: 'same-origin',  // 包含cookies以进行会话认证
                 body: JSON.stringify(channelData)
             });
 
@@ -454,11 +471,8 @@ class APIConverter {
     async loadChannels() {
         console.log('开始加载渠道列表...');
         try {
-            const sessionToken = localStorage.getItem('session_token');
             const response = await fetch('/api/channels', {
-                headers: {
-                    'Authorization': `Bearer ${sessionToken}`
-                }
+                credentials: 'same-origin'  // 包含cookies以进行会话认证
             });
             const result = await response.json();
             console.log('API响应:', result);
@@ -499,13 +513,20 @@ class APIConverter {
             return;
         }
 
-        const channelsHTML = this.channels.map(channel => `
+        const channelsHTML = this.channels.map(channel => {
+            // 构建代理信息显示
+            const proxyInfo = channel.proxy_host && channel.proxy_port 
+                ? `${channel.proxy_type || 'http'}://${channel.proxy_host}:${channel.proxy_port}${channel.proxy_username ? ' (认证)' : ''}`
+                : '未配置';
+                
+            return `
             <div class="channel-item ${channel.enabled ? 'enabled' : 'disabled'}">
                 <div class="channel-info">
                     <h4>${channel.name}</h4>
                     <p><strong>提供商:</strong> ${channel.provider}</p>
                     <p><strong>URL:</strong> ${channel.base_url}</p>
                     <p><strong>自定义Key:</strong> <code>${channel.custom_key}</code></p>
+                    <p><strong>代理:</strong> ${proxyInfo}</p>
                     <p><strong>状态:</strong> ${channel.enabled ? '启用' : '禁用'}</p>
                     <p><small>创建时间: ${new Date(channel.created_at).toLocaleString()}</small></p>
                 </div>
@@ -518,7 +539,8 @@ class APIConverter {
                     <button onclick="apiConverter.deleteChannel('${channel.id}')" class="btn-danger">删除</button>
                 </div>
             </div>
-        `).join('');
+            `;
+        }).join('');
 
         channelsList.innerHTML = channelsHTML;
     }
@@ -565,10 +587,23 @@ class APIConverter {
         }
     }
 
-    editChannel(channelId) {
-        const channel = this.channels.find(c => c.id === channelId);
-        if (!channel) {
-            alert('渠道不存在');
+    async editChannel(channelId) {
+        // 先获取渠道详细信息（包含真实密码）
+        let channel;
+        try {
+            const response = await fetch(`/api/channels/${channelId}`, {
+                credentials: 'same-origin'  // 包含cookies以进行会话认证
+            });
+            const result = await response.json();
+            
+            if (response.ok) {
+                channel = result.channel;
+            } else {
+                alert('获取渠道详情失败: ' + result.detail);
+                return;
+            }
+        } catch (error) {
+            alert('获取渠道详情失败: ' + error.message);
             return;
         }
 
@@ -592,14 +627,81 @@ class APIConverter {
             apiKeyInput.value = '';
             apiKeyInput.placeholder = channel.api_key + ' (留空保持不变)';
             apiKeyInput.required = false;  // 编辑时可以不填
+            // 重置密码可见性
+            apiKeyInput.type = 'password';
+            const apiKeyIcon = document.getElementById('api_key_icon');
+            if (apiKeyIcon) {
+                apiKeyIcon.textContent = '○○';
+                apiKeyIcon.title = '显示';
+            }
         } else {
             apiKeyInput.value = '';
             apiKeyInput.placeholder = '输入新的API密钥或留空保持不变';
             apiKeyInput.required = false;  // 编辑时可以不填
+            // 重置密码可见性
+            apiKeyInput.type = 'password';
+            const apiKeyIcon = document.getElementById('api_key_icon');
+            if (apiKeyIcon) {
+                apiKeyIcon.textContent = '○○';
+                apiKeyIcon.title = '显示';
+            }
         }
         document.getElementById('custom_key').value = channel.custom_key || '';
         document.getElementById('timeout').value = channel.timeout || 30;
         document.getElementById('max_retries').value = channel.max_retries || 3;
+        
+        // 填充代理配置数据
+        const useProxyCheckbox = document.getElementById('use_proxy');
+        const hasProxy = channel.proxy_host && channel.proxy_port;
+        useProxyCheckbox.checked = hasProxy;
+        
+        if (hasProxy) {
+            document.getElementById('proxy_type').value = channel.proxy_type || 'http';
+            document.getElementById('proxy_host').value = channel.proxy_host || '';
+            document.getElementById('proxy_port').value = channel.proxy_port || '';
+            document.getElementById('proxy_username').value = channel.proxy_username || '';
+            // 对于代理密码，显示实际值但默认隐藏
+            const proxyPasswordInput = document.getElementById('proxy_password');
+            if (channel.proxy_password) {
+                proxyPasswordInput.value = channel.proxy_password;
+                proxyPasswordInput.placeholder = '代理密码';
+                // 默认隐藏密码
+                proxyPasswordInput.type = 'password';
+                const proxyPasswordIcon = document.getElementById('proxy_password_icon');
+                if (proxyPasswordIcon) {
+                    proxyPasswordIcon.textContent = '○○';
+                    proxyPasswordIcon.title = '显示';
+                }
+            } else {
+                proxyPasswordInput.value = '';
+                proxyPasswordInput.placeholder = '输入代理密码(可选)';
+                // 重置密码可见性
+                proxyPasswordInput.type = 'password';
+                const proxyPasswordIcon = document.getElementById('proxy_password_icon');
+                if (proxyPasswordIcon) {
+                    proxyPasswordIcon.textContent = '○○';
+                    proxyPasswordIcon.title = '显示';
+                }
+            }
+        } else {
+            document.getElementById('proxy_type').value = 'http';
+            document.getElementById('proxy_host').value = '';
+            document.getElementById('proxy_port').value = '';
+            document.getElementById('proxy_username').value = '';
+            const proxyPasswordInput = document.getElementById('proxy_password');
+            proxyPasswordInput.value = '';
+            proxyPasswordInput.placeholder = '输入代理密码(可选)';
+            // 重置密码可见性
+            proxyPasswordInput.type = 'password';
+            const proxyPasswordIcon = document.getElementById('proxy_password_icon');
+            if (proxyPasswordIcon) {
+                proxyPasswordIcon.textContent = '○○';
+                proxyPasswordIcon.title = '显示';
+            }
+        }
+        
+        // 调用toggleProxyFields来显示/隐藏代理字段
+        toggleProxyFields();
 
         // 添加取消按钮
         if (!document.getElementById('cancelEdit')) {
@@ -646,6 +748,24 @@ class APIConverter {
         const apiKeyInput = document.getElementById('api_key');
         apiKeyInput.placeholder = '';
         apiKeyInput.required = true;
+        apiKeyInput.type = 'password';
+        const apiKeyIcon = document.getElementById('api_key_icon');
+        if (apiKeyIcon) {
+            apiKeyIcon.textContent = '○○';
+            apiKeyIcon.title = '显示';
+        }
+        
+        // 重置代理配置
+        document.getElementById('use_proxy').checked = false;
+        const proxyPasswordInput = document.getElementById('proxy_password');
+        proxyPasswordInput.placeholder = '';
+        proxyPasswordInput.type = 'password';
+        const proxyPasswordIcon = document.getElementById('proxy_password_icon');
+        if (proxyPasswordIcon) {
+            proxyPasswordIcon.textContent = '○○';
+            proxyPasswordIcon.title = '显示';
+        }
+        toggleProxyFields();
 
         // 移除取消按钮
         const cancelButton = document.getElementById('cancelEdit');
@@ -678,6 +798,23 @@ class APIConverter {
         // 如果API密钥是掩码形式或为空，则不更新密钥
         if (!channelData.api_key || channelData.api_key.trim() === '' || channelData.api_key.includes('***')) {
             delete channelData.api_key;
+        }
+        
+        // 处理代理配置
+        channelData.use_proxy = document.getElementById('use_proxy').checked;
+        if (channelData.use_proxy) {
+            channelData.proxy_type = channelData.proxy_type || 'http';
+            channelData.proxy_port = channelData.proxy_port ? parseInt(channelData.proxy_port) : null;
+            // 如果用户名和密码为空，则不发送
+            if (!channelData.proxy_username) delete channelData.proxy_username;
+            if (!channelData.proxy_password) delete channelData.proxy_password;
+        } else {
+            // 如果不使用代理，删除代理相关字段
+            delete channelData.proxy_type;
+            delete channelData.proxy_host;
+            delete channelData.proxy_port;
+            delete channelData.proxy_username;
+            delete channelData.proxy_password;
         }
         
         try {
@@ -758,6 +895,250 @@ class SmoothScroll {
 }
 
 // 全局函数定义
+function toggleProxyFields() {
+    const useProxy = document.getElementById('use_proxy');
+    const proxyFields = document.getElementById('proxy-fields');
+    const proxySwitch = document.getElementById('proxySwitch');
+    const proxyContainer = document.getElementById('proxyToggleContainer');
+    
+    if (useProxy && proxyFields) {
+        if (useProxy.checked) {
+            proxyFields.style.display = 'block';
+            proxySwitch.classList.add('active');
+            proxyContainer.classList.add('active');
+            // 设置必填字段
+            document.getElementById('proxy_host').required = true;
+            document.getElementById('proxy_port').required = true;
+        } else {
+            proxyFields.style.display = 'none';
+            proxySwitch.classList.remove('active');
+            proxyContainer.classList.remove('active');
+            // 取消必填字段
+            document.getElementById('proxy_host').required = false;
+            document.getElementById('proxy_port').required = false;
+            // 清空字段
+            document.getElementById('proxy_host').value = '';
+            document.getElementById('proxy_port').value = '';
+            document.getElementById('proxy_username').value = '';
+            document.getElementById('proxy_password').value = '';
+            // 隐藏测试结果
+            hideProxyTestResult();
+        }
+    }
+}
+
+// 代理开关点击函数
+function toggleProxySwitch() {
+    const useProxy = document.getElementById('use_proxy');
+    if (useProxy) {
+        useProxy.checked = !useProxy.checked;
+        toggleProxyFields();
+    }
+}
+
+// 密码显示/隐藏切换函数
+function togglePasswordVisibility(fieldId) {
+    const passwordField = document.getElementById(fieldId);
+    const iconElement = document.getElementById(fieldId + '_icon');
+    
+    if (passwordField && iconElement) {
+        if (passwordField.type === 'password') {
+            passwordField.type = 'text';
+            iconElement.textContent = '●●';
+            iconElement.title = '隐藏';
+        } else {
+            passwordField.type = 'password';
+            iconElement.textContent = '○○';
+            iconElement.title = '显示';
+        }
+    }
+}
+
+// 代理测试相关函数
+async function testProxyConnection() {
+    // 检查是否启用了代理
+    const useProxy = document.getElementById('use_proxy');
+    if (!useProxy || !useProxy.checked) {
+        alert('请先启用代理配置');
+        return;
+    }
+    
+    // 获取代理配置数据
+    const proxyType = document.getElementById('proxy_type').value;
+    const proxyHost = document.getElementById('proxy_host').value.trim();
+    const proxyPort = document.getElementById('proxy_port').value;
+    const proxyUsername = document.getElementById('proxy_username').value.trim();
+    const proxyPassword = document.getElementById('proxy_password').value;
+    
+    // 验证必填字段
+    if (!proxyHost || !proxyPort) {
+        alert('请填写代理地址和端口');
+        return;
+    }
+    
+    const port = parseInt(proxyPort);
+    if (isNaN(port) || port < 1 || port > 65535) {
+        alert('请输入有效的端口号 (1-65535)');
+        return;
+    }
+    
+    // 构建请求数据
+    const requestData = {
+        proxy_type: proxyType,
+        proxy_host: proxyHost,
+        proxy_port: port
+    };
+    
+    // 如果有用户名和密码，则添加到请求中
+    if (proxyUsername) {
+        requestData.proxy_username = proxyUsername;
+    }
+    if (proxyPassword) {
+        requestData.proxy_password = proxyPassword;
+    }
+    
+    // 显示测试进行中状态
+    showProxyTestProgress();
+    
+    try {
+        const response = await fetch('/api/test_proxy', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
+        });
+        
+        const result = await response.json();
+        
+        // 显示测试结果
+        showProxyTestResult(result);
+        
+    } catch (error) {
+        console.error('代理测试请求失败:', error);
+        showProxyTestResult({
+            success: false,
+            message: '测试请求失败',
+            error: error.message
+        });
+    }
+}
+
+function showProxyTestProgress() {
+    const btn = document.getElementById('testProxyBtn');
+    const btnText = document.getElementById('testProxyBtnText');
+    const spinner = document.getElementById('testProxySpinner');
+    const resultDiv = document.getElementById('proxyTestResult');
+    
+    // 禁用按钮并显示加载状态
+    btn.disabled = true;
+    btnText.textContent = '测试中...';
+    spinner.style.display = 'inline';
+    
+    // 隐藏之前的结果
+    resultDiv.style.display = 'none';
+}
+
+function showProxyTestResult(result) {
+    const btn = document.getElementById('testProxyBtn');
+    const btnText = document.getElementById('testProxyBtnText');
+    const spinner = document.getElementById('testProxySpinner');
+    const resultDiv = document.getElementById('proxyTestResult');
+    const contentDiv = document.getElementById('proxyTestContent');
+    
+    // 恢复按钮状态
+    btn.disabled = false;
+    btnText.textContent = '测试代理连接';
+    spinner.style.display = 'none';
+    
+    // 构建测试结果HTML
+    let resultHTML = '';
+    
+    if (result.success) {
+        resultHTML = `
+            <div class="test-result success">
+                <h4><span class="status-icon success">✓</span> 代理连接测试成功</h4>
+                <div class="test-summary">
+                    <span>代理类型: <strong>${result.proxy_info.type.toUpperCase()}</strong></span>
+                    <span>地址: <strong>${result.proxy_info.host}:${result.proxy_info.port}</strong></span>
+                    ${result.proxy_info.has_auth ? '<span>认证: <strong>已启用</strong></span>' : ''}
+                </div>
+        `;
+        
+        // 添加测试详情
+        if (result.test_results && result.test_results.length > 0) {
+            result.test_results.forEach(testResult => {
+                if (testResult.success) {
+                    resultHTML += `
+                        <div class="test-detail success">
+                            <strong>${testResult.url}</strong> - 
+                            响应时间: ${testResult.response_time}ms - 
+                            外部IP: ${testResult.external_ip}
+                        </div>
+                    `;
+                } else {
+                    resultHTML += `
+                        <div class="test-detail error">
+                            <strong>${testResult.url}</strong> - 
+                            失败: ${testResult.error || '未知错误'}
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        resultHTML += '</div>';
+    } else {
+        resultHTML = `
+            <div class="test-result error">
+                <h4><span class="status-icon error">✗</span> 代理连接测试失败</h4>
+                <div class="test-summary">
+                    <span>错误信息: <strong>${result.message || '未知错误'}</strong></span>
+                </div>
+        `;
+        
+        // 添加错误详情
+        if (result.test_results && result.test_results.length > 0) {
+            result.test_results.forEach(testResult => {
+                const statusClass = testResult.success ? 'success' : 'error';
+                const statusText = testResult.success ? '成功' : '失败';
+                const details = testResult.success ? 
+                    `响应时间: ${testResult.response_time}ms - 外部IP: ${testResult.external_ip}` :
+                    `错误: ${testResult.error || '未知错误'}`;
+                
+                resultHTML += `
+                    <div class="test-detail ${statusClass}">
+                        <strong>${testResult.url}</strong> - ${statusText}: ${details}
+                    </div>
+                `;
+            });
+        } else if (result.error) {
+            resultHTML += `
+                <div class="test-detail error">
+                    技术详情: ${result.error}
+                </div>
+            `;
+        }
+        
+        resultHTML += '</div>';
+    }
+    
+    contentDiv.innerHTML = resultHTML;
+    resultDiv.style.display = 'block';
+    
+    // 滚动到结果位置
+    setTimeout(() => {
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+}
+
+function hideProxyTestResult() {
+    const resultDiv = document.getElementById('proxyTestResult');
+    if (resultDiv) {
+        resultDiv.style.display = 'none';
+    }
+}
+
 function updateTargetModel() {
     const select = document.getElementById('target_model_select');
     const input = document.getElementById('target_model');

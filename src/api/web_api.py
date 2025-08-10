@@ -142,6 +142,23 @@ def get_optional_session_user(request: Request):
     return request.session.get("authenticated", False)
 
 
+def channel_info_to_config(channel_info) -> ChannelConfig:
+    """将ChannelInfo转换为ChannelConfig"""
+    return ChannelConfig(
+        provider=channel_info.provider,
+        base_url=channel_info.base_url,
+        api_key=channel_info.api_key,
+        timeout=channel_info.timeout,
+        max_retries=channel_info.max_retries,
+        use_proxy=getattr(channel_info, 'use_proxy', False),
+        proxy_type=getattr(channel_info, 'proxy_type', None),
+        proxy_host=getattr(channel_info, 'proxy_host', None),
+        proxy_port=getattr(channel_info, 'proxy_port', None),
+        proxy_username=getattr(channel_info, 'proxy_username', None),
+        proxy_password=getattr(channel_info, 'proxy_password', None)
+    )
+
+
 @app.get("/login", response_class=HTMLResponse)
 async def login_page():
     """返回登录页面"""
@@ -270,7 +287,12 @@ async def dashboard(request: Request):
                             </div>
                             <div class="form-group">
                                 <label for="api_key">API密钥:</label>
-                                <input type="password" id="api_key" name="api_key" required>
+                                <div class="password-field-container">
+                                    <input type="password" id="api_key" name="api_key" required>
+                                    <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('api_key')" title="显示">
+                                        <span class="icon" id="api_key_icon">○○</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">
@@ -279,8 +301,69 @@ async def dashboard(request: Request):
                                 <input type="text" id="custom_key" name="custom_key" placeholder="用户调用时使用的key，例如：my-key-123" required>
                                 <small class="form-hint">用户调用API时使用此key进行身份验证</small>
                             </div>
-                            <div class="form-group">
-                                <!-- 占位，保持布局 -->
+                            <div class="proxy-toggle-container" id="proxyToggleContainer">
+                                <input type="checkbox" id="use_proxy" name="use_proxy" onchange="toggleProxyFields()">
+                                <div class="proxy-switch" id="proxySwitch" onclick="toggleProxySwitch()"></div>
+                                <div class="proxy-toggle-content">
+                                    <div class="proxy-toggle-label" onclick="toggleProxySwitch()">
+                                        <span class="icon">🔒</span>
+                                        <span>启用代理服务器</span>
+                                    </div>
+                                    <div class="proxy-toggle-description">通过代理服务器转发API请求</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="proxy-fields" class="form-section" style="display: none;">
+                            <h4>代理配置</h4>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="proxy_type">代理类型:</label>
+                                    <select id="proxy_type" name="proxy_type">
+                                        <option value="http">HTTP</option>
+                                        <option value="https">HTTPS</option>
+                                        <option value="socks5">SOCKS5</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="proxy_host">代理地址:</label>
+                                    <input type="text" id="proxy_host" name="proxy_host" placeholder="例如：127.0.0.1 或 proxy.example.com">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="proxy_port">代理端口:</label>
+                                    <input type="number" id="proxy_port" name="proxy_port" placeholder="例如：8080" min="1" max="65535">
+                                </div>
+                                <div class="form-group">
+                                    <label for="proxy_username">代理用户名 (可选):</label>
+                                    <input type="text" id="proxy_username" name="proxy_username" placeholder="如果需要认证则填写">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="proxy_password">代理密码 (可选):</label>
+                                    <div class="password-field-container">
+                                        <input type="password" id="proxy_password" name="proxy_password" placeholder="如果需要认证则填写">
+                                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('proxy_password')" title="显示">
+                                            <span class="icon" id="proxy_password_icon">○○</span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>&nbsp;</label>
+                                    <button type="button" id="testProxyBtn" class="btn-secondary" onclick="testProxyConnection()" style="margin-top: 5px;">
+                                        <span id="testProxyBtnText">测试代理连接</span>
+                                        <span id="testProxySpinner" class="spinner" style="display: none;">⟳</span>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group" style="grid-column: 1 / -1;">
+                                    <div id="proxyTestResult" class="test-result" style="display: none;">
+                                        <div id="proxyTestContent"></div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">
@@ -470,6 +553,31 @@ async def dashboard(request: Request):
         </div>
 
         <script>
+            // 切换代理字段显示
+            function toggleProxyFields() {
+                const useProxy = document.getElementById('use_proxy');
+                const proxyFields = document.getElementById('proxy-fields');
+                
+                if (useProxy && proxyFields) {
+                    if (useProxy.checked) {
+                        proxyFields.style.display = 'block';
+                        // 设置必填字段
+                        document.getElementById('proxy_host').required = true;
+                        document.getElementById('proxy_port').required = true;
+                    } else {
+                        proxyFields.style.display = 'none';
+                        // 取消必填字段
+                        document.getElementById('proxy_host').required = false;
+                        document.getElementById('proxy_port').required = false;
+                        // 清空字段
+                        document.getElementById('proxy_host').value = '';
+                        document.getElementById('proxy_port').value = '';
+                        document.getElementById('proxy_username').value = '';
+                        document.getElementById('proxy_password').value = '';
+                    }
+                }
+            }
+
             // 注销功能
             async function logout() {
                 try {
@@ -747,142 +855,24 @@ async def get_providers():
     }
 
 
-@app.get("/api/channels")
-async def get_channels(_: bool = Depends(get_session_user)):
-    """获取所有渠道"""
-
-    try:
-        from src.channels.channel_manager import ChannelManager
-        manager = ChannelManager()
-        channels = manager.get_all_channels()
-
-        return {
-            "success": True,
-            "channels": [
-                {
-                    "id": channel.id,
-                    "name": channel.name,
-                    "provider": channel.provider,
-                    "base_url": channel.base_url,
-                    "api_key": mask_api_key(channel.api_key),
-                    "custom_key": channel.custom_key,
-                    "timeout": channel.timeout,
-                    "max_retries": channel.max_retries,
-                    "enabled": channel.enabled,
-                    "models_mapping": channel.models_mapping,
-                    "created_at": channel.created_at,
-                    "updated_at": channel.updated_at
-                }
-                for channel in channels
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Failed to get channels: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# 注意：获取渠道列表API已统一到 conversion_api.py 中
+# 原本此处的 @app.get("/api/channels") 端点与 conversion_api.py 重复
+# 为避免路由冲突，已移除。前端请求会自动使用 conversion_api.py 中的端点
 
 
-@app.post("/api/channels")
-async def create_channel(
-    channel_data: dict,
-    _: bool = Depends(get_session_user)
-):
-    """创建新渠道"""
-
-    try:
-        from src.channels.channel_manager import ChannelManager
-        manager = ChannelManager()
-
-        channel_id = manager.add_channel(
-            name=channel_data["name"],
-            provider=channel_data["provider"],
-            base_url=channel_data["base_url"],
-            api_key=channel_data["api_key"],
-            custom_key=channel_data["custom_key"],
-            timeout=channel_data.get("timeout", 30),
-            max_retries=channel_data.get("max_retries", 3),
-            models_mapping=channel_data.get("models_mapping")
-        )
-
-        return {
-            "success": True,
-            "channel_id": channel_id,
-            "message": "渠道创建成功"
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to create channel: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# 注意：创建渠道API已统一到 conversion_api.py 中
+# 原本此处的 @app.post("/api/channels") 端点与 conversion_api.py 重复
+# 为避免路由冲突，已移除。前端请求会自动使用 conversion_api.py 中的端点
 
 
-@app.put("/api/channels/{channel_id}")
-async def update_channel(
-    channel_id: str,
-    channel_data: dict,
-    _: bool = Depends(get_session_user)
-):
-    """更新渠道"""
-
-    try:
-        from src.channels.channel_manager import ChannelManager
-        manager = ChannelManager()
-
-        # 确保空的api_key不会被传递，使用None而不是空字符串
-        api_key = channel_data.get("api_key")
-        if api_key is not None and api_key.strip() == "":
-            api_key = None
-        
-        success = manager.update_channel(
-            channel_id=channel_id,
-            name=channel_data.get("name"),
-            base_url=channel_data.get("base_url"),
-            api_key=api_key,
-            custom_key=channel_data.get("custom_key"),
-            timeout=channel_data.get("timeout"),
-            max_retries=channel_data.get("max_retries"),
-            enabled=channel_data.get("enabled"),
-            models_mapping=channel_data.get("models_mapping")
-        )
-
-        if success:
-            return {
-                "success": True,
-                "message": "渠道更新成功"
-            }
-        else:
-            raise HTTPException(status_code=404, detail="渠道不存在")
-
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Failed to update channel: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# 注意：渠道更新API已统一到 conversion_api.py 中
+# 原本此处的 @app.put("/api/channels/{channel_id}") 端点与 conversion_api.py 重复
+# 为避免路由冲突，已移除。前端请求会自动使用 conversion_api.py 中的端点
 
 
-@app.delete("/api/channels/{channel_id}")
-async def delete_channel(
-    channel_id: str,
-    _: bool = Depends(get_session_user)
-):
-    """删除渠道"""
-
-    try:
-        from src.channels.channel_manager import ChannelManager
-        manager = ChannelManager()
-
-        success = manager.delete_channel(channel_id)
-
-        if success:
-            return {
-                "success": True,
-                "message": "渠道删除成功"
-            }
-        else:
-            raise HTTPException(status_code=404, detail="渠道不存在")
-
-    except Exception as e:
-        logger.error(f"Failed to delete channel: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+# 注意：删除渠道API已统一到 conversion_api.py 中
+# 原本此处的 @app.delete("/api/channels/{channel_id}") 端点与 conversion_api.py 重复
+# 为避免路由冲突，已移除。前端请求会自动使用 conversion_api.py 中的端点
 
 
 @app.get("/api/capabilities")

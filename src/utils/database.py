@@ -158,6 +158,12 @@ class DatabaseManager:
                         max_retries INTEGER DEFAULT 3,
                         enabled BOOLEAN DEFAULT 1,
                         models_mapping TEXT,
+                        use_proxy BOOLEAN DEFAULT 0,
+                        proxy_type TEXT,
+                        proxy_host TEXT,
+                        proxy_port INTEGER,
+                        proxy_username TEXT,
+                        proxy_password TEXT,
                         created_at TEXT NOT NULL,
                         updated_at TEXT NOT NULL
                     )
@@ -186,6 +192,12 @@ class DatabaseManager:
                         max_retries INT DEFAULT 3,
                         enabled TINYINT(1) DEFAULT 1,
                         models_mapping TEXT,
+                        use_proxy TINYINT(1) DEFAULT 0,
+                        proxy_type VARCHAR(20),
+                        proxy_host VARCHAR(255),
+                        proxy_port INT,
+                        proxy_username VARCHAR(255),
+                        proxy_password TEXT,
                         created_at DATETIME NOT NULL,
                         updated_at DATETIME NOT NULL
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -201,9 +213,55 @@ class DatabaseManager:
                 ''')
             
             conn.commit()
+            
+            # 进行数据库迁移 - 添加代理字段（如果不存在）
+            self._migrate_proxy_fields(cursor, conn)
+            
             logger.info(f"Database ({self.db_type}) initialized successfully")
         finally:
             conn.close()
+
+    def _migrate_proxy_fields(self, cursor, conn):
+        """迁移数据库，添加代理字段（如果不存在）"""
+        try:
+            if self.db_type == "sqlite":
+                # 检查是否已经存在代理字段
+                cursor.execute("PRAGMA table_info(channels)")
+                columns = [row[1] for row in cursor.fetchall()]
+                
+                proxy_fields = ['use_proxy', 'proxy_type', 'proxy_host', 'proxy_port', 'proxy_username', 'proxy_password']
+                for field in proxy_fields:
+                    if field not in columns:
+                        if field == 'use_proxy':
+                            cursor.execute(f"ALTER TABLE channels ADD COLUMN {field} BOOLEAN DEFAULT 0")
+                        elif field in ['proxy_port']:
+                            cursor.execute(f"ALTER TABLE channels ADD COLUMN {field} INTEGER")
+                        else:
+                            cursor.execute(f"ALTER TABLE channels ADD COLUMN {field} TEXT")
+                        logger.info(f"Added column {field} to channels table")
+                        
+            elif self.db_type == "mysql":
+                # 检查是否已经存在代理字段
+                cursor.execute("SHOW COLUMNS FROM channels")
+                columns = [row['Field'] for row in cursor.fetchall()]
+                
+                proxy_fields = {
+                    'use_proxy': 'TINYINT(1) DEFAULT 0',
+                    'proxy_type': 'VARCHAR(20)',
+                    'proxy_host': 'VARCHAR(255)',
+                    'proxy_port': 'INT',
+                    'proxy_username': 'VARCHAR(255)',
+                    'proxy_password': 'TEXT'
+                }
+                
+                for field, field_type in proxy_fields.items():
+                    if field not in columns:
+                        cursor.execute(f"ALTER TABLE channels ADD COLUMN {field} {field_type}")
+                        logger.info(f"Added column {field} to channels table")
+                        
+            conn.commit()
+        except Exception as e:
+            logger.warning(f"Migration warning (proxy fields may already exist): {e}")
     
     def add_channel(
         self,
@@ -214,7 +272,13 @@ class DatabaseManager:
         custom_key: str,
         timeout: int = 30,
         max_retries: int = 3,
-        models_mapping: Optional[Dict[str, str]] = None
+        models_mapping: Optional[Dict[str, str]] = None,
+        use_proxy: bool = False,
+        proxy_type: Optional[str] = None,
+        proxy_host: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        proxy_username: Optional[str] = None,
+        proxy_password: Optional[str] = None
     ) -> str:
         """添加新渠道"""
         channel_id = str(uuid.uuid4())
@@ -230,16 +294,23 @@ class DatabaseManager:
         # 加密API密钥
         encrypted_api_key = encryption_manager.encrypt_api_key(api_key)
         
+        # 加密代理密码（如果存在）
+        encrypted_proxy_password = None
+        if proxy_password:
+            encrypted_proxy_password = encryption_manager.encrypt_api_key(proxy_password)
+        
         with self.get_connection() as conn:
             try:
                 cursor = self._execute_query(conn, '''
                     INSERT INTO channels 
                     (id, name, provider, base_url, api_key, custom_key, timeout, max_retries, 
-                     enabled, models_mapping, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     enabled, models_mapping, use_proxy, proxy_type, proxy_host, proxy_port, 
+                     proxy_username, proxy_password, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     channel_id, name, provider, base_url, encrypted_api_key, custom_key,
-                    timeout, max_retries, True, models_mapping_json, now, now
+                    timeout, max_retries, True, models_mapping_json, use_proxy, proxy_type,
+                    proxy_host, proxy_port, proxy_username, encrypted_proxy_password, now, now
                 ))
                 
                 conn.commit()
@@ -260,7 +331,13 @@ class DatabaseManager:
         timeout: Optional[int] = None,
         max_retries: Optional[int] = None,
         enabled: Optional[bool] = None,
-        models_mapping: Optional[Dict[str, str]] = None
+        models_mapping: Optional[Dict[str, str]] = None,
+        use_proxy: Optional[bool] = None,
+        proxy_type: Optional[str] = None,
+        proxy_host: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        proxy_username: Optional[str] = None,
+        proxy_password: Optional[str] = None
     ) -> bool:
         """更新渠道信息"""
         updates = []
@@ -297,6 +374,26 @@ class DatabaseManager:
         if models_mapping is not None:
             updates.append("models_mapping = ?")
             params.append(json.dumps(models_mapping))
+        if use_proxy is not None:
+            updates.append("use_proxy = ?")
+            params.append(use_proxy)
+        if proxy_type is not None:
+            updates.append("proxy_type = ?")
+            params.append(proxy_type)
+        if proxy_host is not None:
+            updates.append("proxy_host = ?")
+            params.append(proxy_host)
+        if proxy_port is not None:
+            updates.append("proxy_port = ?")
+            params.append(proxy_port)
+        if proxy_username is not None:
+            updates.append("proxy_username = ?")
+            params.append(proxy_username)
+        if proxy_password is not None:
+            updates.append("proxy_password = ?")
+            # 加密代理密码
+            encrypted_proxy_password = encryption_manager.encrypt_api_key(proxy_password)
+            params.append(encrypted_proxy_password)
         
         if not updates:
             return False
@@ -348,6 +445,9 @@ class DatabaseManager:
                 # 解密API密钥
                 if channel['api_key']:
                     channel['api_key'] = encryption_manager.decrypt_api_key(channel['api_key'])
+                # 解密代理密码
+                if channel.get('proxy_password'):
+                    channel['proxy_password'] = encryption_manager.decrypt_api_key(channel['proxy_password'])
                 return channel
             return None
     
@@ -367,6 +467,9 @@ class DatabaseManager:
                 # 解密API密钥
                 if channel['api_key']:
                     channel['api_key'] = encryption_manager.decrypt_api_key(channel['api_key'])
+                # 解密代理密码
+                if channel.get('proxy_password'):
+                    channel['proxy_password'] = encryption_manager.decrypt_api_key(channel['proxy_password'])
                 return channel
             return None
     
@@ -382,6 +485,9 @@ class DatabaseManager:
                 # 解密API密钥
                 if channel['api_key']:
                     channel['api_key'] = encryption_manager.decrypt_api_key(channel['api_key'])
+                # 解密代理密码
+                if channel.get('proxy_password'):
+                    channel['proxy_password'] = encryption_manager.decrypt_api_key(channel['proxy_password'])
                 channels.append(channel)
             return channels
     
@@ -397,6 +503,9 @@ class DatabaseManager:
                 # 解密API密钥
                 if channel['api_key']:
                     channel['api_key'] = encryption_manager.decrypt_api_key(channel['api_key'])
+                # 解密代理密码
+                if channel.get('proxy_password'):
+                    channel['proxy_password'] = encryption_manager.decrypt_api_key(channel['proxy_password'])
                 channels.append(channel)
             return channels
     
@@ -415,6 +524,9 @@ class DatabaseManager:
                 # 解密API密钥
                 if channel['api_key']:
                     channel['api_key'] = encryption_manager.decrypt_api_key(channel['api_key'])
+                # 解密代理密码
+                if channel.get('proxy_password'):
+                    channel['proxy_password'] = encryption_manager.decrypt_api_key(channel['proxy_password'])
                 channels.append(channel)
             return channels
     

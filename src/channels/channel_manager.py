@@ -26,6 +26,13 @@ class ChannelInfo:
     max_retries: int = 3
     enabled: bool = True
     models_mapping: Optional[Dict[str, str]] = None
+    # 代理配置
+    use_proxy: bool = False
+    proxy_type: Optional[str] = None  # http, https, socks5
+    proxy_host: Optional[str] = None
+    proxy_port: Optional[int] = None
+    proxy_username: Optional[str] = None
+    proxy_password: Optional[str] = None
     created_at: str = ""
     updated_at: str = ""
 
@@ -55,7 +62,13 @@ class ChannelManager:
         custom_key: str,
         timeout: int = 30,
         max_retries: int = 3,
-        models_mapping: Optional[Dict[str, str]] = None
+        models_mapping: Optional[Dict[str, str]] = None,
+        use_proxy: bool = False,
+        proxy_type: Optional[str] = None,
+        proxy_host: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        proxy_username: Optional[str] = None,
+        proxy_password: Optional[str] = None
     ) -> str:
         """添加新渠道"""
         if provider not in ['openai', 'anthropic', 'gemini']:
@@ -69,7 +82,13 @@ class ChannelManager:
             custom_key=custom_key,
             timeout=timeout,
             max_retries=max_retries,
-            models_mapping=models_mapping
+            models_mapping=models_mapping,
+            use_proxy=use_proxy,
+            proxy_type=proxy_type,
+            proxy_host=proxy_host,
+            proxy_port=proxy_port,
+            proxy_username=proxy_username,
+            proxy_password=proxy_password
         )
     
     def update_channel(
@@ -82,7 +101,13 @@ class ChannelManager:
         timeout: Optional[int] = None,
         max_retries: Optional[int] = None,
         enabled: Optional[bool] = None,
-        models_mapping: Optional[Dict[str, str]] = None
+        models_mapping: Optional[Dict[str, str]] = None,
+        use_proxy: Optional[bool] = None,
+        proxy_type: Optional[str] = None,
+        proxy_host: Optional[str] = None,
+        proxy_port: Optional[int] = None,
+        proxy_username: Optional[str] = None,
+        proxy_password: Optional[str] = None
     ) -> bool:
         """更新渠道信息"""
         success = db_manager.update_channel(
@@ -94,7 +119,13 @@ class ChannelManager:
             timeout=timeout,
             max_retries=max_retries,
             enabled=enabled,
-            models_mapping=models_mapping
+            models_mapping=models_mapping,
+            use_proxy=use_proxy,
+            proxy_type=proxy_type,
+            proxy_host=proxy_host,
+            proxy_port=proxy_port,
+            proxy_username=proxy_username,
+            proxy_password=proxy_password
         )
 
         if not success:
