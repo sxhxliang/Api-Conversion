@@ -74,6 +74,7 @@ OpenAI ↔ Anthropic ↔ Gemini
 - ✅ **结构化输出**：JSON Schema自动适配
 - ✅ **模型映射**：智能模型名称转换
 - ✅ **思考预算转换**：支持OpenAI reasoning_effort ↔ Anthropic/Gemini thinkingBudget互转
+- ✅ **代理支持**：支持HTTP/HTTPS/SOCKS5代理，内置连通性测试
 
 ### 2. 全面能力检测
 - **基础能力**：聊天对话、流式输出、系统消息、多轮对话
@@ -257,3 +258,7 @@ python web_server.py --debug
 ## 📄 许可证
 
 MIT License
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=chinrain/Api-Conversion&type=Date)](https://www.star-history.com/#chinrain/Api-Conversion&Date)

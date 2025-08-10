@@ -74,6 +74,7 @@ OpenAI ↔ Anthropic ↔ Gemini
 - ✅ **Structured Output**: Automatic JSON Schema adaptation
 - ✅ **Model Mapping**: Smart model name conversion
 - ✅ **Thinking Budget Conversion**: Support OpenAI reasoning_effort ↔ Anthropic/Gemini thinkingBudget interconversion
+- ✅ **Proxy Support**: Support HTTP/HTTPS/SOCKS5 proxy with built-in connectivity testing
 
 ### 2. Comprehensive Capability Detection
 - **Basic Capabilities**: Chat conversation, streaming output, system messages, multi-turn dialogue
@@ -257,3 +258,7 @@ The project is pre-configured with `render.yaml` for one-click deployment:
 ## 📄 License
 
 MIT License
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=chinrain/Api-Conversion&type=Date)](https://www.star-history.com/#chinrain/Api-Conversion&Date)
