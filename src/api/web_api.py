@@ -306,7 +306,6 @@ async def dashboard(request: Request):
                                 <div class="proxy-switch" id="proxySwitch" onclick="toggleProxySwitch()"></div>
                                 <div class="proxy-toggle-content">
                                     <div class="proxy-toggle-label" onclick="toggleProxySwitch()">
-                                        <span class="icon">🔒</span>
                                         <span>启用代理服务器</span>
                                     </div>
                                     <div class="proxy-toggle-description">通过代理服务器转发API请求</div>

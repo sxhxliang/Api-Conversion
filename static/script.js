@@ -14,6 +14,13 @@ class APIConverter {
         this.loadCapabilities();
         this.loadChannels();
         this.setupModernAnimations();
+        // 初始模型下拉同步
+        const providerSelect = document.getElementById('provider');
+        if (providerSelect) {
+            this.updateModelOptions(providerSelect.value);
+        }
+        // 恢复上次活跃标签
+        this.restoreActiveTabFromStorage();
     }
 
     setupEventListeners() {
@@ -22,7 +29,7 @@ class APIConverter {
             document.getElementById('channelForm').addEventListener('submit', (e) => {
                 e.preventDefault();
                 const form = e.target;
-                
+
                 if (form.dataset.isEditing === 'true') {
                     // 编辑模式
                     const channelId = form.dataset.editingChannelId;
@@ -151,7 +158,23 @@ class APIConverter {
         if (activeButton && activeContent) {
             activeButton.classList.add('active');
             activeContent.classList.add('active');
+            // 记住当前激活标签
+            try { localStorage.setItem('active_tab', tabName); } catch (_) { }
+            // 将焦点移到第一个可聚焦元素，提升无障碍体验
+            const firstFocusable = activeContent.querySelector('input, select, textarea, button');
+            if (firstFocusable) {
+                try { firstFocusable.focus(); } catch (_) { }
+            }
         }
+    }
+
+    restoreActiveTabFromStorage() {
+        try {
+            const saved = localStorage.getItem('active_tab');
+            if (saved && document.getElementById(`${saved}-tab`)) {
+                this.switchTab(saved);
+            }
+        } catch (_) { /* 忽略存储错误 */ }
     }
 
     async loadProviders() {
@@ -186,6 +209,7 @@ class APIConverter {
     async startDetection() {
         const form = document.getElementById('detectionForm');
         const formData = new FormData(form);
+        const submitBtn = form && form.querySelector('button[type="submit"]');
 
         // 获取选中的能力
         const capabilities = Array.from(document.querySelectorAll('input[name="capabilities"]:checked'))
@@ -201,6 +225,11 @@ class APIConverter {
         };
 
         try {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.dataset._origText = submitBtn.textContent;
+                submitBtn.textContent = '检测中...';
+            }
             const response = await fetch('/api/detect', {
                 method: 'POST',
                 headers: {
@@ -216,10 +245,16 @@ class APIConverter {
                 this.showProgress();
                 this.startProgressPolling();
             } else {
-                this.showError('检测启动失败: ' + (result.detail || '未知错误'));
+                showToast('检测启动失败: ' + (result.detail || '未知错误'), 'error');
             }
         } catch (error) {
             this.showError('请求失败: ' + error.message);
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitBtn.dataset._origText || '开始检测';
+                delete submitBtn.dataset._origText;
+            }
         }
     }
 
@@ -235,6 +270,11 @@ class APIConverter {
     }
 
     startProgressPolling() {
+        // 避免重复轮询
+        if (this.progressInterval) {
+            clearInterval(this.progressInterval);
+            this.progressInterval = null;
+        }
         this.progressInterval = setInterval(() => {
             this.checkProgress();
         }, 1000);
@@ -297,7 +337,7 @@ class APIConverter {
             const results = await response.json();
 
             this.displayResults(results);
-            
+
             // 清除任务ID，防止重复请求
             this.currentTaskId = null;
         } catch (error) {
@@ -391,6 +431,8 @@ class APIConverter {
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-message fade-in';
         errorDiv.textContent = message;
+        errorDiv.setAttribute('role', 'alert');
+        errorDiv.setAttribute('aria-live', 'assertive');
 
         // 插入到页面顶部
         const container = document.querySelector('.container');
@@ -421,17 +463,18 @@ class APIConverter {
         const form = document.getElementById('channelForm');
         const formData = new FormData(form);
         const channelData = Object.fromEntries(formData.entries());
+        const submitBtn = form && form.querySelector('button[type="submit"]');
 
         // 转换数值类型
         channelData.timeout = parseInt(channelData.timeout);
         channelData.max_retries = parseInt(channelData.max_retries);
-        
+
         // 处理代理配置
         channelData.use_proxy = document.getElementById('use_proxy').checked;
         if (channelData.use_proxy) {
             channelData.proxy_type = channelData.proxy_type || 'http';
             channelData.proxy_port = channelData.proxy_port ? parseInt(channelData.proxy_port) : null;
-            
+
             // 如果用户名和密码为空，则不发送
             if (!channelData.proxy_username) delete channelData.proxy_username;
             if (!channelData.proxy_password) delete channelData.proxy_password;
@@ -445,6 +488,11 @@ class APIConverter {
         }
 
         try {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.dataset._origText = submitBtn.textContent;
+                submitBtn.textContent = '提交中...';
+            }
             const response = await fetch('/api/channels', {
                 method: 'POST',
                 headers: {
@@ -457,14 +505,20 @@ class APIConverter {
             const result = await response.json();
 
             if (response.ok) {
-                alert('渠道创建成功！');
+                showToast('渠道创建成功！', 'success');
                 form.reset();
                 await this.loadChannels(); // 重新加载渠道列表
             } else {
-                alert('创建失败: ' + (result.detail || '未知错误'));
+                showToast('创建失败: ' + (result.detail || '未知错误'), 'error');
             }
         } catch (error) {
-            alert('请求失败: ' + error.message);
+            showToast('请求失败: ' + error.message, 'error');
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitBtn.dataset._origText || '添加渠道';
+                delete submitBtn.dataset._origText;
+            }
         }
     }
 
@@ -515,19 +569,19 @@ class APIConverter {
 
         const channelsHTML = this.channels.map(channel => {
             // 构建代理信息显示
-            const proxyInfo = channel.proxy_host && channel.proxy_port 
+            const proxyInfo = channel.proxy_host && channel.proxy_port
                 ? `${channel.proxy_type || 'http'}://${channel.proxy_host}:${channel.proxy_port}${channel.proxy_username ? ' (认证)' : ''}`
                 : '未配置';
-                
+
             return `
             <div class="channel-item ${channel.enabled ? 'enabled' : 'disabled'}">
                 <div class="channel-info">
                     <h4>${channel.name}</h4>
-                    <p><strong>提供商:</strong> ${channel.provider}</p>
+                    <p><strong>提供商:</strong> <span class="provider-badge provider-${channel.provider}">${(channel.provider || '').toUpperCase()}</span></p>
                     <p><strong>URL:</strong> ${channel.base_url}</p>
-                    <p><strong>自定义Key:</strong> <code>${channel.custom_key}</code></p>
+                    <p><strong>自定义Key:</strong> <code class="copyable pill" data-copy="${channel.custom_key}" title="点击复制" tabindex="0">${channel.custom_key}</code></p>
                     <p><strong>代理:</strong> ${proxyInfo}</p>
-                    <p><strong>状态:</strong> ${channel.enabled ? '启用' : '禁用'}</p>
+                    <p><strong>状态:</strong> <span class="status-chip ${channel.enabled ? 'enabled' : 'disabled'}">${channel.enabled ? '启用' : '禁用'}</span></p>
                     <p><small>创建时间: ${new Date(channel.created_at).toLocaleString()}</small></p>
                 </div>
                 <div class="channel-actions">
@@ -543,6 +597,27 @@ class APIConverter {
         }).join('');
 
         channelsList.innerHTML = channelsHTML;
+        // 绑定复制事件
+        channelsList.querySelectorAll('code.copyable').forEach(codeEl => {
+            const value = codeEl.getAttribute('data-copy') || '';
+            const handler = async () => {
+                const ok = await copyToClipboard(value);
+                if (ok) {
+                    codeEl.classList.add('copied');
+                    showToast('已复制自定义Key', 'success');
+                    setTimeout(() => codeEl.classList.remove('copied'), 1500);
+                } else {
+                    showToast('复制失败，请手动复制', 'error');
+                }
+            };
+            codeEl.addEventListener('click', handler);
+            codeEl.addEventListener('keydown', (ev) => {
+                if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    handler();
+                }
+            });
+        });
     }
 
     async testChannel(channelId) {
@@ -551,12 +626,12 @@ class APIConverter {
             const result = await response.json();
 
             if (response.ok) {
-                alert(`测试成功！响应时间: ${result.test_result.response_time}ms`);
+                showToast(`测试成功！响应时间: ${result.test_result.response_time}ms`, 'success');
             } else {
-                alert('测试失败: ' + (result.detail || '未知错误'));
+                showToast('测试失败: ' + (result.detail || '未知错误'), 'error');
             }
         } catch (error) {
-            alert('测试失败: ' + error.message);
+            showToast('测试失败: ' + error.message, 'error');
         }
     }
 
@@ -580,10 +655,10 @@ class APIConverter {
             if (response.ok) {
                 this.loadChannels(); // 重新加载渠道列表
             } else {
-                alert('操作失败: ' + (result.detail || '未知错误'));
+                showToast('操作失败: ' + (result.detail || '未知错误'), 'error');
             }
         } catch (error) {
-            alert('操作失败: ' + error.message);
+            showToast('操作失败: ' + error.message, 'error');
         }
     }
 
@@ -595,15 +670,15 @@ class APIConverter {
                 credentials: 'same-origin'  // 包含cookies以进行会话认证
             });
             const result = await response.json();
-            
+
             if (response.ok) {
                 channel = result.channel;
             } else {
-                alert('获取渠道详情失败: ' + result.detail);
+                showToast('获取渠道详情失败: ' + result.detail, 'error');
                 return;
             }
         } catch (error) {
-            alert('获取渠道详情失败: ' + error.message);
+            showToast('获取渠道详情失败: ' + error.message, 'error');
             return;
         }
 
@@ -611,12 +686,12 @@ class APIConverter {
         document.querySelector('.channel-form h3').textContent = '编辑渠道';
         const submitButton = document.querySelector('#channelForm button[type="submit"]');
         submitButton.textContent = '更新渠道';
-        
+
         // 存储当前编辑的渠道ID到表单数据属性
         const form = document.getElementById('channelForm');
         form.dataset.editingChannelId = channelId;
         form.dataset.isEditing = 'true';
-        
+
         // 填充表单数据
         document.getElementById('name').value = channel.name || '';
         document.getElementById('channel_provider').value = channel.provider || '';
@@ -649,12 +724,12 @@ class APIConverter {
         document.getElementById('custom_key').value = channel.custom_key || '';
         document.getElementById('timeout').value = channel.timeout || 30;
         document.getElementById('max_retries').value = channel.max_retries || 3;
-        
+
         // 填充代理配置数据
         const useProxyCheckbox = document.getElementById('use_proxy');
         const hasProxy = channel.proxy_host && channel.proxy_port;
         useProxyCheckbox.checked = hasProxy;
-        
+
         if (hasProxy) {
             document.getElementById('proxy_type').value = channel.proxy_type || 'http';
             document.getElementById('proxy_host').value = channel.proxy_host || '';
@@ -699,7 +774,7 @@ class APIConverter {
                 proxyPasswordIcon.title = '显示';
             }
         }
-        
+
         // 调用toggleProxyFields来显示/隐藏代理字段
         toggleProxyFields();
 
@@ -718,11 +793,11 @@ class APIConverter {
         const channelForm = document.querySelector('.channel-form');
         if (channelForm) {
             channelForm.classList.add('editing-mode');
-            
+
             // 延迟滚动，确保DOM更新完成
             setTimeout(() => {
-                channelForm.scrollIntoView({ 
-                    behavior: 'smooth', 
+                channelForm.scrollIntoView({
+                    behavior: 'smooth',
                     block: 'start',
                     inline: 'nearest'
                 });
@@ -735,15 +810,15 @@ class APIConverter {
         document.querySelector('.channel-form h3').textContent = '添加新渠道';
         const submitButton = document.querySelector('#channelForm button[type="submit"]');
         submitButton.textContent = '添加渠道';
-        
+
         // 清除编辑状态
         const form = document.getElementById('channelForm');
         delete form.dataset.editingChannelId;
         delete form.dataset.isEditing;
-        
+
         // 重置表单
         form.reset();
-        
+
         // 重置API密钥字段的placeholder和必填属性
         const apiKeyInput = document.getElementById('api_key');
         apiKeyInput.placeholder = '';
@@ -754,7 +829,7 @@ class APIConverter {
             apiKeyIcon.textContent = '○○';
             apiKeyIcon.title = '显示';
         }
-        
+
         // 重置代理配置
         document.getElementById('use_proxy').checked = false;
         const proxyPasswordInput = document.getElementById('proxy_password');
@@ -784,6 +859,7 @@ class APIConverter {
         const form = document.getElementById('channelForm');
         const formData = new FormData(form);
         const channelData = Object.fromEntries(formData.entries());
+        const submitBtn = form && form.querySelector('button[type="submit"]');
 
         // 转换数值类型
         channelData.timeout = parseInt(channelData.timeout);
@@ -791,15 +867,15 @@ class APIConverter {
 
         // 输入验证
         if (!channelData.name || !channelData.provider || !channelData.base_url || !channelData.custom_key) {
-            alert('请填写所有必填字段');
+            showToast('请填写所有必填字段', 'error');
             return;
         }
-        
+
         // 如果API密钥是掩码形式或为空，则不更新密钥
         if (!channelData.api_key || channelData.api_key.trim() === '' || channelData.api_key.includes('***')) {
             delete channelData.api_key;
         }
-        
+
         // 处理代理配置
         channelData.use_proxy = document.getElementById('use_proxy').checked;
         if (channelData.use_proxy) {
@@ -816,8 +892,13 @@ class APIConverter {
             delete channelData.proxy_username;
             delete channelData.proxy_password;
         }
-        
+
         try {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.dataset._origText = submitBtn.textContent;
+                submitBtn.textContent = '更新中...';
+            }
             const response = await fetch(`/api/channels/${channelId}`, {
                 method: 'PUT',
                 headers: {
@@ -829,20 +910,26 @@ class APIConverter {
             const result = await response.json();
 
             if (response.ok) {
-                alert('渠道更新成功！');
+                showToast('渠道更新成功！', 'success');
                 this.cancelEdit();
                 await this.loadChannels(); // 重新加载渠道列表
             } else {
                 if (response.status === 404) {
-                    alert('渠道不存在，可能已被删除。页面将刷新以同步最新数据。');
+                    showToast('渠道不存在，可能已被删除。即将同步最新数据。', 'error');
                     await this.loadChannels();
                     this.cancelEdit();
                 } else {
-                    alert('更新失败: ' + (result.detail || '未知错误'));
+                    showToast('更新失败: ' + (result.detail || '未知错误'), 'error');
                 }
             }
         } catch (error) {
-            alert('请求失败: ' + error.message);
+            showToast('请求失败: ' + error.message, 'error');
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = submitBtn.dataset._origText || '更新渠道';
+                delete submitBtn.dataset._origText;
+            }
         }
     }
 
@@ -860,13 +947,13 @@ class APIConverter {
             const result = await response.json();
 
             if (response.ok) {
-                alert('删除成功！');
+                showToast('删除成功！', 'success');
                 await this.loadChannels(); // 重新加载渠道列表
             } else {
-                alert('删除失败: ' + (result.detail || '未知错误'));
+                showToast('删除失败: ' + (result.detail || '未知错误'), 'error');
             }
         } catch (error) {
-            alert('删除失败: ' + error.message);
+            showToast('删除失败: ' + error.message, 'error');
         }
     }
 }
@@ -900,7 +987,7 @@ function toggleProxyFields() {
     const proxyFields = document.getElementById('proxy-fields');
     const proxySwitch = document.getElementById('proxySwitch');
     const proxyContainer = document.getElementById('proxyToggleContainer');
-    
+
     if (useProxy && proxyFields) {
         if (useProxy.checked) {
             proxyFields.style.display = 'block';
@@ -940,7 +1027,7 @@ function toggleProxySwitch() {
 function togglePasswordVisibility(fieldId) {
     const passwordField = document.getElementById(fieldId);
     const iconElement = document.getElementById(fieldId + '_icon');
-    
+
     if (passwordField && iconElement) {
         if (passwordField.type === 'password') {
             passwordField.type = 'text';
@@ -962,33 +1049,33 @@ async function testProxyConnection() {
         alert('请先启用代理配置');
         return;
     }
-    
+
     // 获取代理配置数据
     const proxyType = document.getElementById('proxy_type').value;
     const proxyHost = document.getElementById('proxy_host').value.trim();
     const proxyPort = document.getElementById('proxy_port').value;
     const proxyUsername = document.getElementById('proxy_username').value.trim();
     const proxyPassword = document.getElementById('proxy_password').value;
-    
+
     // 验证必填字段
     if (!proxyHost || !proxyPort) {
         alert('请填写代理地址和端口');
         return;
     }
-    
+
     const port = parseInt(proxyPort);
     if (isNaN(port) || port < 1 || port > 65535) {
         alert('请输入有效的端口号 (1-65535)');
         return;
     }
-    
+
     // 构建请求数据
     const requestData = {
         proxy_type: proxyType,
         proxy_host: proxyHost,
         proxy_port: port
     };
-    
+
     // 如果有用户名和密码，则添加到请求中
     if (proxyUsername) {
         requestData.proxy_username = proxyUsername;
@@ -996,10 +1083,10 @@ async function testProxyConnection() {
     if (proxyPassword) {
         requestData.proxy_password = proxyPassword;
     }
-    
+
     // 显示测试进行中状态
     showProxyTestProgress();
-    
+
     try {
         const response = await fetch('/api/test_proxy', {
             method: 'POST',
@@ -1008,12 +1095,12 @@ async function testProxyConnection() {
             },
             body: JSON.stringify(requestData)
         });
-        
+
         const result = await response.json();
-        
+
         // 显示测试结果
         showProxyTestResult(result);
-        
+
     } catch (error) {
         console.error('代理测试请求失败:', error);
         showProxyTestResult({
@@ -1029,12 +1116,12 @@ function showProxyTestProgress() {
     const btnText = document.getElementById('testProxyBtnText');
     const spinner = document.getElementById('testProxySpinner');
     const resultDiv = document.getElementById('proxyTestResult');
-    
+
     // 禁用按钮并显示加载状态
     btn.disabled = true;
     btnText.textContent = '测试中...';
     spinner.style.display = 'inline';
-    
+
     // 隐藏之前的结果
     resultDiv.style.display = 'none';
 }
@@ -1045,15 +1132,15 @@ function showProxyTestResult(result) {
     const spinner = document.getElementById('testProxySpinner');
     const resultDiv = document.getElementById('proxyTestResult');
     const contentDiv = document.getElementById('proxyTestContent');
-    
+
     // 恢复按钮状态
     btn.disabled = false;
     btnText.textContent = '测试代理连接';
     spinner.style.display = 'none';
-    
+
     // 构建测试结果HTML
     let resultHTML = '';
-    
+
     if (result.success) {
         resultHTML = `
             <div class="test-result success">
@@ -1064,7 +1151,7 @@ function showProxyTestResult(result) {
                     ${result.proxy_info.has_auth ? '<span>认证: <strong>已启用</strong></span>' : ''}
                 </div>
         `;
-        
+
         // 添加测试详情
         if (result.test_results && result.test_results.length > 0) {
             result.test_results.forEach(testResult => {
@@ -1086,7 +1173,7 @@ function showProxyTestResult(result) {
                 }
             });
         }
-        
+
         resultHTML += '</div>';
     } else {
         resultHTML = `
@@ -1096,16 +1183,16 @@ function showProxyTestResult(result) {
                     <span>错误信息: <strong>${result.message || '未知错误'}</strong></span>
                 </div>
         `;
-        
+
         // 添加错误详情
         if (result.test_results && result.test_results.length > 0) {
             result.test_results.forEach(testResult => {
                 const statusClass = testResult.success ? 'success' : 'error';
                 const statusText = testResult.success ? '成功' : '失败';
-                const details = testResult.success ? 
+                const details = testResult.success ?
                     `响应时间: ${testResult.response_time}ms - 外部IP: ${testResult.external_ip}` :
                     `错误: ${testResult.error || '未知错误'}`;
-                
+
                 resultHTML += `
                     <div class="test-detail ${statusClass}">
                         <strong>${testResult.url}</strong> - ${statusText}: ${details}
@@ -1119,13 +1206,13 @@ function showProxyTestResult(result) {
                 </div>
             `;
         }
-        
+
         resultHTML += '</div>';
     }
-    
+
     contentDiv.innerHTML = resultHTML;
     resultDiv.style.display = 'block';
-    
+
     // 滚动到结果位置
     setTimeout(() => {
         resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -1151,12 +1238,15 @@ function selectAllCapabilities() {
     document.querySelectorAll('input[name="capabilities"]').forEach(cb => {
         cb.checked = true;
     });
+    // 视觉反馈
+    showToast('已全选能力', 'info');
 }
 
 function clearAllCapabilities() {
     document.querySelectorAll('input[name="capabilities"]').forEach(cb => {
         cb.checked = false;
     });
+    showToast('已清空能力选择', 'info');
 }
 
 async function fetchModels() {
@@ -1234,4 +1324,74 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initializeApp);
 } else {
     initializeApp();
+}
+
+// 复制到剪贴板（带回退）
+async function copyToClipboard(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (_) { }
+    // 回退方法
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+    } catch (_) {
+        return false;
+    }
+}
+
+// 轻量Toast实现，避免引入库
+function showToast(message, type = 'info') {
+    try {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.position = 'fixed';
+            container.style.right = '16px';
+            container.style.bottom = '16px';
+            container.style.zIndex = '9999';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        toast.className = `toast-item toast-${type}`;
+        toast.textContent = message;
+        toast.style.marginTop = '8px';
+        toast.style.padding = '10px 14px';
+        toast.style.borderRadius = '6px';
+        toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)';
+        toast.style.fontSize = '14px';
+        toast.style.background = type === 'success' ? '#e8f5e9' : type === 'error' ? '#ffebee' : '#f1f3f5';
+        toast.style.border = '1px solid ' + (type === 'success' ? '#c8e6c9' : type === 'error' ? '#ffcdd2' : '#e0e0e0');
+        toast.style.color = type === 'success' ? '#2d7d32' : type === 'error' ? '#c62828' : '#333';
+        toast.style.transition = 'transform .2s ease, opacity .2s ease';
+        toast.style.transform = 'translateY(10px)';
+        toast.style.opacity = '0';
+        container.appendChild(toast);
+        // 动画进入
+        requestAnimationFrame(() => {
+            toast.style.transform = 'translateY(0)';
+            toast.style.opacity = '1';
+        });
+        // 3秒后移除
+        setTimeout(() => {
+            toast.style.transform = 'translateY(10px)';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 220);
+        }, 3000);
+    } catch (_) {
+        // 回退
+        console.log(`[${type}]`, message);
+    }
 }

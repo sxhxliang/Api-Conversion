@@ -1,3 +1,185 @@
+/* =========================
+   Ultimate Gold Overrides (Force original black/white/gold palette)
+   ========================= */
+:root {
+    --color-accent: #d4af37 !important;
+    --color-accent-light: #f5e6b8 !important;
+    --color-accent-dark: #b8941f !important;
+}
+
+.header-bar h1 {
+    background: linear-gradient(90deg, #000000 0%, #b8941f 50%, #000000 100%) !important;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+}
+
+.btn-primary {
+    background: var(--color-primary) !important;
+    border: 2px solid var(--color-primary) !important;
+    color: var(--bg-secondary) !important;
+    border-radius: var(--radius-none) !important;
+}
+
+.btn-primary:hover {
+    box-shadow: var(--shadow-luxury), 0 0 0 3px rgba(212, 175, 55, 0.15) !important;
+}
+
+.btn-primary:active {
+    transform: translateY(-1px) !important;
+}
+
+.btn-secondary {
+    border-radius: var(--radius-none) !important;
+}
+
+.proxy-toggle-label {
+    background: var(--color-primary) !important;
+    border: 2px solid var(--color-primary) !important;
+    color: var(--bg-secondary) !important;
+    border-radius: var(--radius-none) !important;
+}
+
+.proxy-toggle-label:hover {
+    background: var(--color-accent-dark) !important;
+    border-color: var(--color-accent-dark) !important;
+}
+
+.proxy-toggle-container.active .proxy-toggle-label {
+    background: var(--color-accent) !important;
+    border-color: var(--color-accent) !important;
+    color: var(--bg-secondary) !important;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--color-accent) !important;
+    box-shadow: var(--shadow-accent), var(--shadow-inset) !important;
+}
+
+.progress-fill {
+    background: linear-gradient(90deg, var(--color-accent), var(--color-accent-light)) !important;
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.5) !important;
+}
+
+.status-chip.enabled {
+    background: #e8f5e8 !important;
+    color: var(--text-success) !important;
+    border: 1px solid var(--color-success-light) !important;
+}
+
+.tab-button.active::after {
+    background: var(--color-accent) !important;
+}
+
+/* =========================
+   Gold Couture Final Overrides (保持原配色并增强视觉)
+   仅样式覆写，不改变DOM与逻辑
+   ========================= */
+
+/* 恢复金色主调，覆盖任何后置蓝色定义 */
+:root {
+    --color-accent: #d4af37;
+    --color-accent-light: #f5e6b8;
+    --color-accent-dark: #b8941f;
+}
+
+/* 容器回归原始黑金风格参数（更精致阴影） */
+.container {
+    max-width: 1000px;
+    border-radius: var(--radius-none);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    box-shadow: var(--shadow-luxury);
+    backdrop-filter: blur(10px);
+}
+
+/* Header 标题加入低调金色渐变质感 */
+.header-bar h1 {
+    background: linear-gradient(90deg, #000000 0%, #b8941f 50%, #000000 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Tabs 回到金色强调线的简洁风格 */
+.tab-navigation {
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: var(--radius-none);
+}
+
+.tab-button {
+    border-radius: 0;
+}
+
+.tab-button::after {
+    display: block;
+}
+
+.tab-button.active {
+    background: var(--bg-secondary);
+    box-shadow: none;
+}
+
+/* 主按钮回归黑金，保留黄金光晕 */
+.btn-primary {
+    border: 2px solid var(--color-primary);
+    border-radius: var(--radius-none);
+    background: var(--color-primary);
+    color: var(--bg-secondary);
+}
+
+.btn-primary:hover {
+    box-shadow: var(--shadow-luxury), 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
+
+.btn-primary:active {
+    transform: translateY(-1px);
+}
+
+/* 代理切换按钮回归黑金按钮风格 */
+.proxy-toggle-label {
+    border: 2px solid var(--color-primary);
+    border-radius: var(--radius-none);
+    background: var(--color-primary);
+    color: var(--bg-secondary);
+    box-shadow: var(--shadow-soft);
+}
+
+.proxy-toggle-label:hover {
+    background: var(--color-accent-dark);
+    border-color: var(--color-accent-dark);
+}
+
+.proxy-toggle-container.active .proxy-toggle-label {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: var(--bg-secondary);
+    box-shadow: var(--shadow-accent);
+}
+
+/* 输入聚焦使用金色高亮（覆盖任意蓝色硬编码） */
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--color-accent) !important;
+    box-shadow: var(--shadow-accent), var(--shadow-inset) !important;
+}
+
+/* 进度条回归金色渐变 */
+.progress-fill {
+    background: linear-gradient(90deg, var(--color-accent), var(--color-accent-light));
+    box-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+}
+
+/* 摘要数值强化金色分割细节 */
+.summary-card .value {
+    background: linear-gradient(180deg, #000000, #222222 40%, #b8941f 60%, #000000 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
 /* AI API统一转换代理系统 - 时装周奢华风格 Plus */
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -21,19 +203,19 @@
     --color-accent-dark: #b8941f;
     --color-rose-gold: #e8b4a6;
     --color-platinum: #e5e4e2;
-    
+
     /* 状态颜色 */
     --color-error: #dc3545;
     --color-success: #28a745;
     --color-warning: #ffc107;
     --color-info: #17a2b8;
-    
+
     /* 状态颜色 - Light变体 */
     --color-success-light: #c8e6c9;
     --color-error-light: #ffcdd2;
     --color-warning-light: #fff3cd;
     --color-info-light: #d1ecf1;
-    
+
     /* 边框颜色 */
     --border-error: var(--color-error-light);
 
@@ -224,7 +406,7 @@ body::before {
     left: 50%;
     width: 60px;
     height: 1px;
-    background: var(--color-accent);
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
     transform: translateX(-50%);
     animation: shimmerBottom 3s ease-in-out infinite 1.5s;
 }
@@ -291,7 +473,7 @@ body::before {
     position: absolute;
     bottom: -var(--space-sm);
     left: 50%;
-    width: 30px;
+    width: 48px;
     height: 1px;
     background: var(--color-accent);
     transform: translateX(-50%);
@@ -361,6 +543,17 @@ body::before {
     transform: translateY(-1px);
 }
 
+/* 聚焦时 label 高亮微调（与 script 中的 focused 类配合） */
+.form-group.focused label {
+    color: var(--text-primary);
+}
+
+/* 占位符样式更柔和 */
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+    color: var(--text-muted);
+}
+
 .form-group input:hover,
 .form-group select:hover,
 .form-group textarea:hover {
@@ -417,7 +610,7 @@ body::before {
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.1), transparent);
+    background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.12), transparent);
     transition: left var(--duration-slow) var(--ease-elegant);
 }
 
@@ -428,8 +621,8 @@ body::before {
 .capabilities-grid label:hover {
     border-color: var(--color-accent);
     background: var(--bg-tertiary);
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-medium);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-soft);
 }
 
 .capabilities-grid label input[type="checkbox"] {
@@ -582,12 +775,20 @@ body::before {
 
 .btn-primary:hover {
     transform: translateY(-3px);
-    box-shadow: var(--shadow-luxury);
+    box-shadow: var(--shadow-luxury), 0 0 0 3px rgba(212, 175, 55, 0.15);
     border-color: var(--color-accent-dark);
 }
 
 .btn-primary:active {
     transform: translateY(-1px);
+}
+
+/* 主按钮禁用态细化 */
+.btn-primary:disabled,
+.btn-primary[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+    filter: grayscale(10%);
 }
 
 /* 次要按钮样式 */
@@ -634,6 +835,12 @@ body::before {
 .btn-secondary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* 次要按钮聚焦可达性增强 */
+.btn-secondary:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.25);
 }
 
 /* 进度区域 */
@@ -799,7 +1006,7 @@ body::before {
 /* 结果摘要 */
 .results-summary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
     gap: var(--space-lg);
     margin-bottom: var(--space-2xl);
 }
@@ -809,10 +1016,35 @@ body::before {
     padding: var(--space-xl);
     border: 1px solid var(--border-primary);
     border-radius: var(--radius-none);
-    background: var(--bg-secondary);
+    background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
     transition: all var(--duration-medium) var(--ease-elegant);
     position: relative;
     overflow: hidden;
+}
+
+/* 摘要卡片内部流光 */
+.summary-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(212, 175, 55, 0.08), transparent);
+}
+
+.summary-card:hover::after {
+    animation: cardShine 1.2s var(--ease-refined);
+}
+
+@keyframes cardShine {
+    0% {
+        left: -100%;
+    }
+
+    100% {
+        left: 100%;
+    }
 }
 
 .summary-card::before {
@@ -848,8 +1080,8 @@ body::before {
 }
 
 .summary-card:hover {
-    transform: translateY(-6px);
-    box-shadow: var(--shadow-luxury);
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-strong);
     border-color: var(--color-accent);
 }
 
@@ -966,7 +1198,8 @@ body::before {
 
 .capabilities-table tbody tr:hover {
     background: var(--bg-tertiary);
-    transform: translateX(4px);
+    transform: translateX(2px);
+    box-shadow: var(--shadow-soft);
 }
 
 /* 状态标签 */
@@ -1324,19 +1557,39 @@ body::before {
     align-items: center;
     padding: 20px;
     margin-bottom: 16px;
-    background: var(--bg-secondary);
+    background: linear-gradient(135deg, #ffffff 0%, #fafafa 100%);
     border-radius: 12px;
     border: 1px solid var(--border-secondary);
     transition: all 0.3s ease;
+    position: relative;
 }
 
 .channel-item:hover {
-    box-shadow: var(--shadow-medium);
-    transform: translateY(-2px);
+    box-shadow: var(--shadow-strong);
+    transform: translateY(-3px);
+}
+
+/* 渠道卡片底部流动金色线条 */
+.channel-item::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+    opacity: 0.0;
+    transform: translateX(-30%);
+    transition: all var(--duration-elegance) var(--ease-elegant);
+}
+
+.channel-item:hover::after {
+    opacity: 0.8;
+    transform: translateX(0);
 }
 
 .channel-item.enabled {
-    border-left: 4px solid var(--color-success);
+    border-left: 4px solid var(--color-accent);
 }
 
 .channel-item.disabled {
@@ -1347,7 +1600,7 @@ body::before {
 .channel-info h4 {
     color: var(--text-primary);
     font-family: var(--font-display);
-    font-size: 1.2rem;
+    font-size: 1.25rem;
     font-weight: 600;
     margin-bottom: 8px;
 }
@@ -1356,6 +1609,140 @@ body::before {
     color: var(--text-secondary);
     font-size: 0.9rem;
     margin-bottom: 4px;
+}
+
+/* 提供商徽章 */
+.provider-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 999px;
+    letter-spacing: 0.06em;
+    position: relative;
+    overflow: hidden;
+}
+
+.provider-openai {
+    background: #ffffff;
+    color: #000000;
+    border: 1px solid var(--border-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.provider-anthropic {
+    /* 基于你提供的类风格：bg-accent-main-000 -> 15 55.6% 52.4%，悬停 15 63.1% 59.6% */
+    background: hsl(var(--anth-accent-main-000, 15 55.6% 52.4%));
+    color: hsl(var(--anth-oncolor, 0 0% 100%));
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    font-family: var(--font-ui, var(--font-sans));
+    transition: transform var(--duration-medium) var(--ease-elegant), box-shadow var(--duration-medium) var(--ease-elegant), background-color var(--duration-medium) var(--ease-elegant);
+}
+
+/* 模拟 group-hover/active 动效 */
+.channel-item:hover .provider-anthropic {
+    background: hsl(var(--anth-accent-main-200, 15 63.1% 59.6%));
+    box-shadow: var(--shadow-soft);
+}
+
+.channel-item:active .provider-anthropic {
+    box-shadow: none;
+}
+
+.provider-gemini {
+    background: #0b56d0;
+    color: #fff;
+}
+
+/* 徽章扫光效果 */
+.provider-badge::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+    transform: skewX(-20deg);
+    filter: blur(0.5px);
+}
+
+.channel-item:hover .provider-badge::after {
+    animation: badgeShine 1.2s var(--ease-refined);
+}
+
+@keyframes badgeShine {
+    0% {
+        left: -120%;
+    }
+
+    100% {
+        left: 120%;
+    }
+}
+
+/* 状态圆角徽标 */
+.status-chip {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.status-chip.enabled {
+    background: #e8f5e9;
+    color: var(--text-success);
+    border: 1px solid var(--color-success-light);
+}
+
+.status-chip.disabled {
+    background: #f5f5f5;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-primary);
+}
+
+/* 状态徽标轻微呼吸动画 */
+.channel-item:hover .status-chip.enabled {
+    animation: chipPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes chipPulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.2);
+    }
+
+    50% {
+        box-shadow: 0 0 0 6px rgba(40, 167, 69, 0.0);
+    }
+}
+
+/* pill 形态的可复制 key */
+code.pill {
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+/* 可复制 code 的细节样式 */
+code.copyable {
+    position: relative;
+    cursor: pointer;
+    outline: none;
+}
+
+code.copyable:hover {
+    background: rgba(212, 175, 55, 0.08);
+}
+
+code.copyable:focus {
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.3);
+}
+
+code.copyable.copied {
+    background: linear-gradient(135deg, #e8f5e8, #f1f8e9);
+    border-bottom: 1px dotted var(--color-success-light);
 }
 
 .channel-actions {
@@ -1389,7 +1776,7 @@ body::before {
     background: var(--color-accent-dark);
     border-color: var(--color-accent-dark);
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .channel-actions .btn-secondary {
@@ -1606,6 +1993,37 @@ body::before {
 
 .tab-button.active::after {
     transform: scaleX(1);
+    box-shadow: 0 2px 0 var(--color-accent);
+}
+
+/* 标签栏流动底纹 */
+.tab-navigation {
+    position: relative;
+    overflow: hidden;
+}
+
+.tab-navigation::after {
+    content: '';
+    position: absolute;
+    left: -100%;
+    bottom: -2px;
+    width: 50%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+}
+
+.tab-navigation:hover::after {
+    animation: navFlow 2.4s linear infinite;
+}
+
+@keyframes navFlow {
+    0% {
+        left: -100%;
+    }
+
+    100% {
+        left: 150%;
+    }
 }
 
 .tab-content {
@@ -1742,7 +2160,7 @@ body::before {
 
 .header-bar h1 {
     font-family: var(--font-display);
-    font-size: 2.5rem;
+    font-size: 2.4rem;
     font-weight: 400;
     color: var(--text-primary);
     margin: 0;
@@ -1756,7 +2174,7 @@ body::before {
         gap: var(--space-md);
         text-align: center;
     }
-    
+
     .header-bar h1 {
         font-size: 2rem;
     }
@@ -2035,6 +2453,7 @@ body::before {
         opacity: 0;
         transform: translateY(-30px) scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -2254,8 +2673,13 @@ body::before {
 }
 
 @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .test-summary {
@@ -2288,7 +2712,7 @@ body::before {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
-    
+
     .spinner {
         animation: none !important;
     }
@@ -2298,68 +2722,97 @@ body::before {
 .proxy-toggle-container {
     display: flex;
     align-items: center;
-    gap: 16px;
-    margin-bottom: 20px;
-    padding: 20px;
-    background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
-    border: 1px solid var(--border-secondary);
-    border-radius: var(--radius-lg);
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 0;
+    background: transparent;
+    /* 取消外框背景 */
+    border: none;
+    /* 取消外框边框 */
+    border-radius: 0;
+    /* 取消外框圆角 */
     transition: all var(--duration-elegance) var(--ease-elegant);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    box-shadow: none;
+    /* 取消外框阴影 */
 }
 
 .proxy-toggle-container:hover {
-    border-color: var(--color-accent);
-    box-shadow: 0 2px 12px rgba(212, 175, 55, 0.1);
+    background: transparent;
+    box-shadow: none;
 }
 
 .proxy-switch {
-    position: relative;
-    display: inline-block;
-    width: 52px;
-    height: 28px;
-    background: #ccc;
-    border-radius: 28px;
-    cursor: pointer;
-    transition: all var(--duration-elegance) var(--ease-elegant);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    /* 改为隐藏滑块视觉，使用文字按钮样式的标签作为触发 */
+    display: none;
 }
 
 .proxy-switch:before {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 24px;
-    height: 24px;
-    background: white;
-    border-radius: 50%;
-    transition: all var(--duration-elegance) var(--ease-elegant);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+    content: none;
 }
 
 .proxy-switch.active {
-    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-dark) 100%);
+    display: none;
 }
 
 .proxy-switch.active:before {
-    transform: translateX(24px);
+    content: none;
 }
 
 .proxy-toggle-label {
-    font-weight: 600;
-    color: var(--text-primary);
-    font-size: 1rem;
-    cursor: pointer;
-    user-select: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
+    padding: var(--space-md) var(--space-lg);
+    border: 2px solid var(--color-primary);
+    border-radius: var(--radius-none);
+    background: var(--color-primary);
+    color: var(--bg-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+    user-select: none;
+    transition: all var(--duration-medium) var(--ease-elegant);
+    text-transform: uppercase;
+    position: relative;
+    overflow: hidden;
+}
+
+.proxy-toggle-label:hover {
+    background: var(--color-accent-dark);
+    border-color: var(--color-accent-dark);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-soft);
+}
+
+/* 细节光泽动画，与按钮统一 */
+.proxy-toggle-label::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left var(--duration-slow) var(--ease-refined);
+}
+
+.proxy-toggle-label:hover::before {
+    left: 100%;
 }
 
 .proxy-toggle-label .icon {
     font-size: 1.2em;
     transition: all var(--duration-elegance) var(--ease-elegant);
+    display: none;
+    /* 隐藏emoji图标 */
+}
+
+.proxy-toggle-container.active .proxy-toggle-label {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: var(--bg-secondary);
+    box-shadow: var(--shadow-accent);
 }
 
 .proxy-toggle-container.active .proxy-toggle-label .icon {
@@ -2370,8 +2823,9 @@ body::before {
 .proxy-toggle-description {
     font-size: 0.875rem;
     color: var(--text-tertiary);
-    margin-top: 4px;
+    margin-top: 6px;
     font-style: italic;
+    margin-left: 2px;
 }
 
 /* 密码字段容器样式 */
@@ -2384,7 +2838,8 @@ body::before {
 .password-field-container input[type="password"],
 .password-field-container input[type="text"] {
     width: 100%;
-    padding-right: 45px; /* 为按钮留出空间 */
+    padding-right: 45px;
+    /* 为按钮留出空间 */
 }
 
 .password-toggle-btn {
@@ -2418,4 +2873,221 @@ body::before {
 /* 隐藏默认的复选框 */
 .proxy-toggle-container input[type="checkbox"] {
     display: none;
+}
+
+/* =========================
+   Cupertino Design Overhaul
+   (DOM 保持不变，仅视觉升级)
+   ========================= */
+
+:root {
+    /* 新的苹果系主色（蓝） */
+    --color-accent: #0A84FF;
+    --color-accent-light: #5AAEFF;
+    --color-accent-dark: #0060DF;
+
+    /* 新的背景与边框层级（更轻、更通透） */
+    --bg-primary: linear-gradient(180deg, #F6F8FB 0%, #FFFFFF 100%);
+    --bg-secondary: rgba(255, 255, 255, 0.78);
+    --bg-tertiary: rgba(255, 255, 255, 0.64);
+    --bg-quaternary: rgba(255, 255, 255, 0.56);
+    --bg-hover: rgba(0, 0, 0, 0.03);
+
+    --border-primary: rgba(0, 0, 0, 0.08);
+    --border-secondary: rgba(0, 0, 0, 0.06);
+    --border-accent: rgba(10, 132, 255, 0.35);
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+    letter-spacing: 0;
+    background: var(--bg-primary);
+}
+
+.container {
+    max-width: 1120px;
+    border-radius: 20px;
+    background: var(--bg-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow: 0 30px 60px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(20px) saturate(160%);
+}
+
+.header-bar {
+    background: transparent;
+    border-bottom: 1px solid var(--border-primary);
+    padding: 28px var(--space-xl);
+}
+
+.header-bar h1 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.header-actions .btn-tertiary {
+    border-radius: 12px;
+}
+
+/* Segmented 风格的标签栏 */
+.tab-navigation {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 14px;
+    padding: 6px;
+    gap: 6px;
+}
+
+.tab-button {
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid transparent;
+}
+
+.tab-button:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.tab-button.active {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.tab-button::after {
+    display: none;
+}
+
+/* 按钮 - 苹果系蓝渐变 */
+.btn-primary {
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #0A84FF, #007AFF);
+    box-shadow: 0 6px 18px rgba(10, 132, 255, 0.24);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(10, 132, 255, 0.28);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary {
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.btn-secondary:hover {
+    background: #fff;
+    border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* 输入与选择器 - 通透填充样式 */
+.form-group input,
+.form-group select,
+.form-group textarea {
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(8px);
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: rgba(10, 132, 255, 0.45);
+    box-shadow: 0 0 0 4px rgba(10, 132, 255, 0.12), inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+/* 代理切换按钮 - 统一为主按钮风格 */
+.proxy-toggle-label {
+    border-radius: 12px;
+    background: linear-gradient(180deg, #0A84FF, #007AFF);
+    color: #fff;
+    border: none;
+    box-shadow: 0 6px 18px rgba(10, 132, 255, 0.24);
+}
+
+.proxy-toggle-container.active .proxy-toggle-label {
+    background: linear-gradient(180deg, #0A84FF, #0A84FF);
+}
+
+/* 卡片与列表 */
+.channel-management,
+.api-usage,
+.channel-list,
+.channel-form {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(14px);
+}
+
+.channel-item {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.85) 100%);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.provider-badge {
+    letter-spacing: 0.08em;
+}
+
+.status-chip.enabled {
+    background: rgba(10, 132, 255, 0.08);
+    color: #0A84FF;
+    border: 1px solid rgba(10, 132, 255, 0.25);
+}
+
+/* 表格与进度条 */
+.capabilities-table thead {
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.capabilities-table {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.capabilities-table tbody tr:hover {
+    background: rgba(0, 0, 0, 0.025);
+}
+
+.progress-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.progress-fill {
+    background: linear-gradient(90deg, #0A84FF, #5AAEFF);
+    box-shadow: 0 0 12px rgba(10, 132, 255, 0.35);
+}
+
+/* 结果摘要卡片更通透 */
+.summary-card {
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.8);
+}
+
+.summary-card:hover {
+    box-shadow: 0 18px 36px rgba(0, 0, 0, 0.12);
+}
+
+/* 登录页适配新风格 */
+.login-container {
+    background: linear-gradient(180deg, #F1F4F8 0%, #FFFFFF 100%);
+}
+
+.login-form {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    backdrop-filter: blur(14px);
+}
+
+.login-form .btn-primary {
+    border-radius: 12px;
 }
