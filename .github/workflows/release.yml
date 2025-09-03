@@ -61,6 +61,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Step 2.5: 规范化镜像信息（仓库名小写、去掉 v 前缀）
+      - name: Derive image refs
+        id: vars
+        run: |
+          echo "repo_lower=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+          echo "tag_no_v=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
       # Step 3: 自动生成 Release
       - name: Create Release
         id: create_release
@@ -77,7 +84,10 @@ jobs:
             
             ### 📦 Docker 镜像
             ```bash
-            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            # 固定具体版本（推荐）
+            docker pull ghcr.io/${{ steps.vars.outputs.repo_lower }}:${{ steps.vars.outputs.tag_no_v }}
+            # 或用于临时测试
+            docker pull ghcr.io/${{ steps.vars.outputs.repo_lower }}:latest
             ```
             
             ### 📋 更新内容
