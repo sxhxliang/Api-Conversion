@@ -458,6 +458,70 @@ class APIConverter {
         });
     }
 
+    // ===== 模型映射区域 =====
+    addMappingRow(original = '', mapped = '') {
+        const container = document.getElementById('model-mapping-rows');
+        if (!container) return;
+        const row = document.createElement('div');
+        row.className = 'mapping-row';
+        row.style.display = 'contents';
+        row.innerHTML = `
+            <div class="form-group">
+                <input type="text" class="model-original" placeholder="原模型名 (如 A1)" value="${original || ''}">
+            </div>
+            <div class="form-group">
+                <input type="text" class="model-mapped" placeholder="映射模型名 (如 B1)" value="${mapped || ''}">
+            </div>
+            <div class="form-group" style="display:flex; align-items:center;">
+                <button type="button" class="btn-danger" title="删除映射">删除</button>
+            </div>
+        `;
+        const delBtn = row.querySelector('button.btn-danger');
+        delBtn.addEventListener('click', () => row.remove());
+        container.appendChild(row);
+    }
+
+    clearMappingRows() {
+        const container = document.getElementById('model-mapping-rows');
+        if (!container) return;
+        container.innerHTML = '';
+    }
+
+    setMappingRows(mappingObj) {
+        this.clearMappingRows();
+        const container = document.getElementById('model-mapping-rows');
+        if (!container) return;
+        if (mappingObj && typeof mappingObj === 'object') {
+            const entries = Object.entries(mappingObj);
+            if (entries.length === 0) {
+                // 提供一行空的方便用户添加
+                this.addMappingRow();
+            } else {
+                entries.forEach(([k, v]) => this.addMappingRow(k, v));
+            }
+        } else {
+            // 默认提供一行空的
+            this.addMappingRow();
+        }
+    }
+
+    collectModelMapping(options = { forceIfPresent: false }) {
+        const container = document.getElementById('model-mapping-rows');
+        if (!container) return null;
+        const rows = Array.from(container.querySelectorAll('.mapping-row'));
+        if (rows.length === 0) return options.forceIfPresent ? {} : null;
+        const mapping = {};
+        rows.forEach(r => {
+            const orig = (r.querySelector('.model-original')?.value || '').trim();
+            const mapped = (r.querySelector('.model-mapped')?.value || '').trim();
+            if (orig && mapped) mapping[orig] = mapped;
+        });
+        // 如果强制返回（用于更新），即使为空也返回空对象用于清空
+        if (options.forceIfPresent) return mapping;
+        // 用于创建：若没有有效条目则返回null以省略字段
+        return Object.keys(mapping).length > 0 ? mapping : null;
+    }
+
     // 渠道管理方法
     async createChannel() {
         const form = document.getElementById('channelForm');
@@ -485,6 +549,12 @@ class APIConverter {
             delete channelData.proxy_port;
             delete channelData.proxy_username;
             delete channelData.proxy_password;
+        }
+
+        // 收集模型映射
+        const mapping = this.collectModelMapping();
+        if (mapping) {
+            channelData.models_mapping = mapping;
         }
 
         try {
@@ -572,6 +642,11 @@ class APIConverter {
             const proxyInfo = channel.proxy_host && channel.proxy_port
                 ? `${channel.proxy_type || 'http'}://${channel.proxy_host}:${channel.proxy_port}${channel.proxy_username ? ' (认证)' : ''}`
                 : '未配置';
+            // 模型映射摘要
+            const mappingCount = channel.models_mapping ? Object.keys(channel.models_mapping || {}).length : 0;
+            const mappingSummary = mappingCount > 0
+                ? `<p><strong>模型映射:</strong> ${mappingCount} 条</p>`
+                : '';
 
             return `
             <div class="channel-item ${channel.enabled ? 'enabled' : 'disabled'}">
@@ -582,6 +657,7 @@ class APIConverter {
                     <p><strong>自定义Key:</strong> <code class="copyable pill" data-copy="${channel.custom_key}" title="点击复制" tabindex="0">${channel.custom_key}</code></p>
                     <p><strong>代理:</strong> ${proxyInfo}</p>
                     <p><strong>状态:</strong> <span class="status-chip ${channel.enabled ? 'enabled' : 'disabled'}">${channel.enabled ? '启用' : '禁用'}</span></p>
+                    ${mappingSummary}
                     <p><small>创建时间: ${new Date(channel.created_at).toLocaleString()}</small></p>
                 </div>
                 <div class="channel-actions">
@@ -725,6 +801,9 @@ class APIConverter {
         document.getElementById('timeout').value = channel.timeout || 30;
         document.getElementById('max_retries').value = channel.max_retries || 3;
 
+        // 填充模型映射
+        this.setMappingRows(channel.models_mapping || {});
+
         // 填充代理配置数据
         const useProxyCheckbox = document.getElementById('use_proxy');
         const hasProxy = channel.proxy_host && channel.proxy_port;
@@ -842,6 +921,9 @@ class APIConverter {
         }
         toggleProxyFields();
 
+        // 清空模型映射
+        this.clearMappingRows();
+
         // 移除取消按钮
         const cancelButton = document.getElementById('cancelEdit');
         if (cancelButton) {
@@ -891,6 +973,12 @@ class APIConverter {
             delete channelData.proxy_port;
             delete channelData.proxy_username;
             delete channelData.proxy_password;
+        }
+
+        // 收集模型映射（更新时即使为空也发送以便清空）
+        const mapping = this.collectModelMapping({ forceIfPresent: true });
+        if (mapping !== null) {
+            channelData.models_mapping = mapping; // 空对象 {} 将清空已有映射
         }
 
         try {
