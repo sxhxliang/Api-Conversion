@@ -467,7 +467,7 @@ class APIConverter {
         row.style.display = 'contents';
         row.innerHTML = `
             <div class="form-group">
-                <input type="text" class="model-original" placeholder="原模型名 (如 A1)" value="${original || ''}">
+                <input type="text" class="model-original" placeholder="请求模型名 (如 A1)" value="${original || ''}">
             </div>
             <div class="form-group">
                 <input type="text" class="model-mapped" placeholder="映射模型名 (如 B1)" value="${mapped || ''}">

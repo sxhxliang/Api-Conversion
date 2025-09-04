@@ -39,6 +39,8 @@ class ChannelCreateRequest(BaseModel):
     custom_key: str = Field(..., description="自定义key，用户调用时使用")
     timeout: int = Field(30, description="超时时间")
     max_retries: int = Field(3, description="最大重试次数")
+    # 新增：模型映射（请求模型名 -> 映射模型名）
+    models_mapping: Optional[Dict[str, str]] = None
     use_proxy: Optional[bool] = None
     proxy_type: Optional[str] = None
     proxy_host: Optional[str] = None
@@ -96,6 +98,20 @@ async def forward_request(
     method: str = "POST"
 ) -> Dict[str, Any]:
     """转发请求到目标API"""
+    # 应用模型映射（如果配置）
+    try:
+        if isinstance(converted_data, dict) and "model" in converted_data and channel.models_mapping:
+            original_model = converted_data.get("model")
+            mapped = channel.models_mapping.get(original_model)
+            if mapped:
+                logger.info(f"Applying model mapping for channel {channel.name}: {original_model} -> {mapped}")
+                converted_data = {**converted_data, "model": mapped}
+            else:
+                logger.debug(
+                    f"Model mapping not found for '{original_model}'. Available keys: {list(channel.models_mapping.keys())}"
+                )
+    except Exception as e:
+        logger.warning(f"Failed to apply model mapping: {e}")
     # 构建请求URL
     if channel.provider == "openai":
         url = f"{channel.base_url.rstrip('/')}/chat/completions"
@@ -105,7 +121,7 @@ async def forward_request(
         headers["x-api-key"] = channel.api_key
         headers["anthropic-version"] = "2023-06-01"
     elif channel.provider == "gemini":
-        # Gemini需要从converted_data中提取模型名称
+        # Gemini需要从converted_data中提取模型名称（已在上面应用了映射）
         model = converted_data.get("model")
         if not model:
             raise ValueError("Model name is required for Gemini requests")
@@ -153,6 +169,7 @@ async def create_channel(request: ChannelCreateRequest, _: bool = Depends(get_se
             custom_key=request.custom_key,
             timeout=request.timeout,
             max_retries=request.max_retries,
+            models_mapping=request.models_mapping,
             use_proxy=request.use_proxy,
             proxy_type=request.proxy_type,
             proxy_host=request.proxy_host,
@@ -189,6 +206,7 @@ async def list_channels(_: bool = Depends(get_session_user)):
                     "timeout": getattr(channel, 'timeout', 30),
                     "max_retries": getattr(channel, 'max_retries', 3),
                     "enabled": channel.enabled,
+                    "models_mapping": getattr(channel, 'models_mapping', None),
                     # 代理配置
                     "proxy_host": getattr(channel, 'proxy_host', None),
                     "proxy_port": getattr(channel, 'proxy_port', None),
@@ -227,6 +245,7 @@ async def get_channel(channel_id: str, _: bool = Depends(get_session_user)):
                 "timeout": getattr(channel, 'timeout', 30),
                 "max_retries": getattr(channel, 'max_retries', 3),
                 "enabled": channel.enabled,
+                "models_mapping": getattr(channel, 'models_mapping', None),
                 # 代理配置
                 "proxy_host": getattr(channel, 'proxy_host', None),
                 "proxy_port": getattr(channel, 'proxy_port', None),

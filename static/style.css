@@ -3091,3 +3091,31 @@ body {
 .login-form .btn-primary {
     border-radius: 12px;
 }
+
+/* =========================
+   模型映射删除按钮（仅在映射区生效，功能不变）
+   ========================= */
+#model-mapping-section .btn-danger {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--color-error-light, #ffcdd2);
+    background: var(--color-error, #dc3545);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.12);
+    transition: background .18s ease, filter .18s ease, transform .12s ease, box-shadow .18s ease;
+}
+
+#model-mapping-section .btn-danger:hover {
+    filter: brightness(0.96);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(220, 53, 69, 0.18);
+}
+
+#model-mapping-section .btn-danger:active {
+    transform: translateY(0);
+}
+
+#model-mapping-section .btn-danger:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15), 0 4px 12px rgba(220, 53, 69, 0.12);
+}

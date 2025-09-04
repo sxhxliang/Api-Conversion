@@ -389,6 +389,25 @@ async def forward_request_to_channel(
         if not conversion_result.success:
             raise ConversionError(f"Request conversion failed: {conversion_result.error}")
     
+    # 在构建URL与发送前，按渠道配置应用模型映射（仅影响下游请求，不改变原始request_data，确保客户端看到原始模型名）
+    mapped_model = None
+    try:
+        if channel.models_mapping and isinstance(request_data, dict):
+            original_model = request_data.get("model")
+            if original_model:
+                mapped_model = channel.models_mapping.get(original_model)
+                if mapped_model:
+                    logger.info(f"Applying model mapping for channel {channel.name}: {original_model} -> {mapped_model}")
+                    # 确保发送到下游的请求体中也使用映射后的模型
+                    if isinstance(conversion_result.data, dict):
+                        conversion_result.data = {**conversion_result.data, "model": mapped_model}
+                else:
+                    logger.debug(
+                        f"Model mapping not found for '{original_model}'. Available keys: {list(channel.models_mapping.keys())}"
+                    )
+    except Exception as e:
+        logger.warning(f"Failed to apply model mapping: {e}")
+
     # 2. 统一构建目标API的URL和headers（支持所有功能组合）
     target_headers = {"Content-Type": "application/json"}
     # Always use original request_data for stream detection, since conversion_result.data
@@ -403,7 +422,8 @@ async def forward_request_to_channel(
         target_headers["x-api-key"] = channel.api_key
         target_headers["anthropic-version"] = "2023-06-01"
     elif channel.provider == "gemini":
-        model = request_data.get("model")
+        # 对Gemini而言，模型也会体现在URL中，这里优先使用映射后的模型
+        model = mapped_model or request_data.get("model")
         if not model:
             raise ValueError("Model is required for Gemini API requests")
         
@@ -983,15 +1003,7 @@ async def unified_gemini_count_tokens_endpoint(
         request_data = await request.json()
         
         # 对于countTokens，只需要contents字段
-        count_request_data = {
-            "model": clean_model_id,
-            "contents": request_data.get("contents", [])
-        }
-        
-        logger.debug(f"Count tokens request data: {safe_log_request(count_request_data)}")
-        
-        # 直接调用渠道进行token计数
-        # 这里需要找到合适的渠道来处理请求
+        # 应用模型映射（如果配置）
         logger.debug(f"Looking for channel with custom_key: {mask_api_key(api_key)}")
         channel = channel_manager.get_channel_by_custom_key(api_key)
         if not channel:
@@ -1000,19 +1012,32 @@ async def unified_gemini_count_tokens_endpoint(
             all_channels = channel_manager.get_all_channels()
             logger.info(f"Available channels: {[(ch.custom_key, ch.provider) for ch in all_channels]}")
             raise HTTPException(status_code=503, detail="No available channels")
+
+        effective_model_id = clean_model_id
+        if channel.models_mapping:
+            effective_model_id = channel.models_mapping.get(clean_model_id, clean_model_id)
+            if effective_model_id != clean_model_id:
+                logger.info(f"Applying model mapping for countTokens: {clean_model_id} -> {effective_model_id}")
+
+        count_request_data = {
+            "model": effective_model_id,
+            "contents": request_data.get("contents", [])
+        }
+        
+        logger.debug(f"Count tokens request data: {safe_log_request(count_request_data)}")
         
         logger.info(f"Found channel: {channel.name} (provider: {channel.provider}, custom_key: {channel.custom_key})")
         
         # 根据渠道provider类型处理countTokens请求
         if channel.provider == "gemini":
             # Gemini渠道：直接转发countTokens请求
-            return await handle_gemini_count_tokens(channel, clean_model_id, count_request_data)
+            return await handle_gemini_count_tokens(channel, effective_model_id, count_request_data)
         elif channel.provider == "openai":
             # OpenAI渠道：转换为OpenAI格式并使用tiktoken计算
-            return await handle_openai_count_tokens_for_gemini(channel, clean_model_id, count_request_data)
+            return await handle_openai_count_tokens_for_gemini(channel, effective_model_id, count_request_data)
         elif channel.provider == "anthropic":
             # Anthropic渠道：转换为Anthropic格式并估算token数量
-            return await handle_anthropic_count_tokens_for_gemini(channel, clean_model_id, count_request_data)
+            return await handle_anthropic_count_tokens_for_gemini(channel, effective_model_id, count_request_data)
         else:
             logger.error(f"Channel provider {channel.provider} does not support countTokens")
             raise HTTPException(status_code=400, detail=f"Channel provider {channel.provider} does not support countTokens")
@@ -1278,5 +1303,3 @@ async def health_check():
         "timestamp": time.time(),
         "version": "1.0.0"
     }
-
-

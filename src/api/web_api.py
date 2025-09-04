@@ -375,6 +375,16 @@ async def dashboard(request: Request):
                                 <input type="number" id="max_retries" name="max_retries" value="3" min="1" max="10">
                             </div>
                         </div>
+                        <div class="form-section" id="model-mapping-section">
+                            <h4>模型映射</h4>
+                            <p class="form-hint">当客户端请求某个模型时，可映射为渠道实际调用的模型。例如：将 <code>A1</code> 映射为 <code>B1</code>。可配置多条。</p>
+                            <div id="model-mapping-rows" class="form-row" style="grid-template-columns: 1fr 1fr auto; gap: 10px;">
+                                <!-- 动态添加映射行 -->
+                            </div>
+                            <div class="form-actions" style="margin-top: 8px;">
+                                <button type="button" class="btn-secondary" onclick="apiConverter.addMappingRow()">新增映射</button>
+                            </div>
+                        </div>
                         <button type="submit" class="btn-primary">添加渠道</button>
                     </form>
                 </div>
