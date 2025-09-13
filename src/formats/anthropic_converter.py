@@ -7,6 +7,7 @@ import json
 import copy
 
 from .base_converter import BaseConverter, ConversionResult, ConversionError
+from .reasoning_utils import determine_reasoning_effort
 
 # 全局工具状态管理器
 class ToolStateManager:
@@ -48,52 +49,6 @@ class AnthropicConverter(BaseConverter):
     def set_original_model(self, model: str):
         """设置原始模型名称"""
         self.original_model = model
-    
-    def _determine_reasoning_effort_from_budget(self, budget_tokens: Optional[int]) -> str:
-        """根据budget_tokens智能判断OpenAI reasoning_effort等级
-        
-        Args:
-            budget_tokens: Anthropic thinking的budget_tokens值
-            
-        Returns:
-            str: OpenAI reasoning_effort等级 ("low", "medium", "high")
-        """
-        import os
-        
-        # 如果没有提供budget_tokens，默认为high
-        if budget_tokens is None:
-            self.logger.info("No budget_tokens provided, defaulting to reasoning_effort='high'")
-            return "high"
-        
-        # 从环境变量获取阈值配置
-        low_threshold_str = os.environ.get("ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD")
-        high_threshold_str = os.environ.get("ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD")
-        
-        # 检查必需的环境变量
-        if low_threshold_str is None:
-            raise ConversionError("ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD environment variable is required for intelligent reasoning_effort determination")
-        
-        if high_threshold_str is None:
-            raise ConversionError("ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD environment variable is required for intelligent reasoning_effort determination")
-        
-        try:
-            low_threshold = int(low_threshold_str)
-            high_threshold = int(high_threshold_str)
-            
-            self.logger.debug(f"Threshold configuration: low <= {low_threshold}, medium <= {high_threshold}, high > {high_threshold}")
-            
-            if budget_tokens <= low_threshold:
-                effort = "low"
-            elif budget_tokens <= high_threshold:
-                effort = "medium"
-            else:
-                effort = "high"
-            
-            self.logger.info(f"🎯 Budget tokens {budget_tokens} -> reasoning_effort '{effort}' (thresholds: low<={low_threshold}, high<={high_threshold})")
-            return effort
-            
-        except ValueError as e:
-            raise ConversionError(f"Invalid threshold values in environment variables: {e}. ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD and ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD must be integers.")
     
     def reset_streaming_state(self):
         """重置所有流式相关的状态变量，避免状态污染"""
@@ -307,7 +262,13 @@ class AnthropicConverter(BaseConverter):
             budget_tokens = data["thinking"].get("budget_tokens")
             
             # 根据budget_tokens智能判断reasoning_effort等级
-            reasoning_effort = self._determine_reasoning_effort_from_budget(budget_tokens)
+            reasoning_effort = determine_reasoning_effort(
+                budget_tokens,
+                "ANTHROPIC_TO_OPENAI_LOW_REASONING_THRESHOLD",
+                "ANTHROPIC_TO_OPENAI_HIGH_REASONING_THRESHOLD",
+                self.logger,
+                budget_label="Budget tokens",
+            )
             result_data["reasoning_effort"] = reasoning_effort
             
             # 处理max_completion_tokens的优先级逻辑
