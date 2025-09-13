@@ -7,6 +7,7 @@ import json
 import copy
 
 from .base_converter import BaseConverter, ConversionResult, ConversionError
+from .anthropic_openai import anthropic_response_to_openai
 
 
 class OpenAIConverter(BaseConverter):
@@ -473,80 +474,12 @@ class OpenAIConverter(BaseConverter):
     
     def _convert_from_anthropic_response(self, data: Dict[str, Any]) -> ConversionResult:
         """转换Anthropic响应到OpenAI格式"""
-        # 必须有原始模型名称，否则报错
-        if not self.original_model:
-            raise ValueError("Original model name is required for response conversion")
-            
-        import time
-        result_data = {
-            "id": f"chatcmpl-{data.get('id', 'anthropic')}",
-            "object": "chat.completion",
-            "created": int(time.time()),  # 使用当前时间戳
-            "model": self.original_model,  # 使用原始模型名称
-            "choices": [],
-            "usage": {}
-        }
-        
-        # 处理内容、工具调用和思考内容
-        content = ""
-        tool_calls = []
-        thinking_content = ""
-        
-        if "content" in data and isinstance(data["content"], list):
-            for item in data["content"]:
-                if item.get("type") == "text":
-                    content += item.get("text", "")
-                elif item.get("type") == "thinking":
-                    # 收集thinking内容，OpenAI Chat Completions API不直接支持reasoning格式
-                    # 我们将thinking内容作为特殊标记包含在响应中
-                    thinking_text = item.get("thinking", "")
-                    if thinking_text.strip():
-                        thinking_content += thinking_text
-                elif item.get("type") == "tool_use":
-                    # 转换 Anthropic tool_use 为 OpenAI tool_calls
-                    tool_calls.append({
-                        "id": item.get("id", ""),
-                        "type": "function",
-                        "function": {
-                            "name": item.get("name", ""),
-                            "arguments": json.dumps(item.get("input", {}), ensure_ascii=False)
-                        }
-                    })
-        
-        # 如果有thinking内容，将其作为前缀添加到content中
-        # 使用特殊格式标记，便于客户端识别和处理
-        if thinking_content.strip():
-            content = f"<thinking>\n{thinking_content.strip()}\n</thinking>\n\n{content}"
-        
-        # 构建消息，根据是否有工具调用决定结构
-        message = {"role": "assistant"}
-        
-        if tool_calls:
-            # 有工具调用时，content 可以为 None（OpenAI 规范）
-            message["content"] = content if content else None
-            message["tool_calls"] = tool_calls
-            finish_reason = "tool_calls"
-        else:
-            # 没有工具调用时，只有文本内容
-            message["content"] = content
-            finish_reason = self._map_finish_reason(data.get("stop_reason", ""), "anthropic", "openai")
-        
-        result_data["choices"] = [{
-            "index": 0,
-            "message": message,
-            "finish_reason": finish_reason
-        }]
-        
-        # 处理使用情况
-        if "usage" in data and data["usage"] is not None:
-            usage = data["usage"]
-            result_data["usage"] = {
-                "prompt_tokens": usage.get("input_tokens", 0),
-                "completion_tokens": usage.get("output_tokens", 0),
-                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-            }
-        
-        return ConversionResult(success=True, data=result_data)
+        try:
+            result_data = anthropic_response_to_openai(self, data)
+            return ConversionResult(success=True, data=result_data)
+        except Exception as e:
+            return ConversionResult(success=False, error=str(e))
+
     
     def _convert_from_gemini_response(self, data: Dict[str, Any]) -> ConversionResult:
         """转换Gemini响应到OpenAI格式"""
