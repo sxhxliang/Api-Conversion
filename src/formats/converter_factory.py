@@ -80,6 +80,7 @@ def convert_response(source_format: str, target_format: str, data: dict, origina
     return converter.convert_response(data, source_format, target_format)
 
 
+
 def convert_streaming_chunk(source_format: str, target_format: str, data: dict, original_model: str = None):
     """转换流式响应chunk格式"""
     import logging
